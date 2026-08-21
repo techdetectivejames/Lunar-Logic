@@ -1,13 +1,13 @@
 # FIN_APP
 
-A finance dashboard backed by the [Finnhub](https://finnhub.io/) API and [yfinance](https://pypi.org/project/yfinance/):
+A finance dashboard backed by the [Finnhub](https://finnhub.io/) API and [yahoo-finance2](https://github.com/gadicc/yahoo-finance2):
 
 - **Live quotes** for a customizable stock watchlist and crypto watchlist, refreshed via
   short-interval polling of a batched quote endpoint (serverless-friendly - no persistent
   WebSocket connection required).
 - **Scrolling market ticker tape** (DOW, S&P 500, NASDAQ, Russell 2000, VIX) along the header.
 - **Candlestick charts** per ticker (5d/1mo/3mo/6mo/1y) drawn on canvas.
-- **Dividend info** (per-share amount, yield, pay frequency, last/ex-dividend dates) via yfinance,
+- **Dividend info** (per-share amount, yield, pay frequency, last/ex-dividend dates) via yahoo-finance2,
   since Finnhub's dividend endpoints require a paid plan.
 - **Incoming predictions** — next earnings date/EPS estimate and analyst recommendation consensus.
 - **Stock & crypto news with speculation** — recent headlines, each annotated with a local
@@ -19,7 +19,6 @@ A finance dashboard backed by the [Finnhub](https://finnhub.io/) API and [yfinan
 ## Prerequisites
 
 - Node.js 18+
-- Python 3 (used only to run the bundled yfinance bridge scripts)
 - A free [Finnhub API key](https://finnhub.io/register)
 
 ## Setup
@@ -28,22 +27,15 @@ A finance dashboard backed by the [Finnhub](https://finnhub.io/) API and [yfinan
 # 1. Install Node dependencies
 npm install
 
-# 2. Create a local Python venv for the yfinance bridge (dividends & candles)
-python3 -m venv .venv
-.venv/bin/pip install yfinance
-
-# 3. Add your Finnhub API key
+# 2. Add your Finnhub API key
 cp .env.example .env
 # then edit .env and set FINNHUB_API_KEY=...
 
-# 4. Start the server
+# 3. Start the server
 npm start
 ```
 
-Visit   
-
-> The Python venv is required — the system Python has no pip on some distros, and the
-> app always calls `.venv/bin/python` directly (never the system Python).
+Visit  
 
 ## Project layout
 
@@ -52,8 +44,7 @@ Visit
 - `api/index.js` — Vercel serverless entrypoint: exports the same Express app with no `.listen()` and no background sync (serverless functions can't host either).
 - `vercel.json` — Rewrites every request to `api/index.js`.
 - `server/finnhub.js` — Finnhub REST API client with in-memory caching.
-- `server/yfinance.js` — Node bridge that calls the Python scripts below via `child_process.execFile`.
-- `server/yfinance_bridge.py` / `server/candles_bridge.py` — Python scripts using yfinance to fetch dividend info and OHLC candles.
+- `server/yfinance.js` — Dividend info and OHLC candle data via the pure-JS `yahoo-finance2` package (no Python required, works on serverless).
 - `server/speculation.js` — Keyword heuristic used to generate the speculation notes.
 - `public/` — Static frontend (vanilla HTML/CSS/JS, no build step).
 

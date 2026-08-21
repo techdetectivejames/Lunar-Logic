@@ -96,7 +96,7 @@ app.get('/api/dividend', async (req, res) => {
 
   try {
     // Finnhub's dividend endpoints are premium-only on the configured key,
-    // so dividend data is sourced from yfinance instead.
+    // so dividend data is sourced from Yahoo Finance instead.
     const dividend = await yfinance.getDividendInfo(symbol);
     res.json(dividend);
   } catch (err) {
@@ -114,7 +114,7 @@ app.get('/api/candles', async (req, res) => {
 
   try {
     // Finnhub's /stock/candle endpoint is premium-only on the configured key,
-    // so OHLC candle data is sourced from yfinance instead.
+    // so OHLC candle data is sourced from Yahoo Finance instead.
     const result = await yfinance.getCandles(symbol, period);
     res.json(result);
   } catch (err) {
@@ -205,7 +205,7 @@ app.get('/api/crypto/candles', async (req, res) => {
 
   try {
     // Finnhub's /crypto/candle endpoint is premium-only on the configured key,
-    // so OHLC candle data is sourced from yfinance instead (e.g. BTC -> BTC-USD).
+    // so OHLC candle data is sourced from Yahoo Finance instead (e.g. BTC -> BTC-USD).
     const result = await yfinance.getCandles(`${base}-USD`, period);
     res.json({ ...result, symbol: base });
   } catch (err) {
