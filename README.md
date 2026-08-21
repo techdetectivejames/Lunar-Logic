@@ -2,8 +2,9 @@
 
 A finance dashboard backed by the [Finnhub](https://finnhub.io/) API and [yfinance](https://pypi.org/project/yfinance/):
 
-- **Live quotes** for a customizable stock watchlist and crypto watchlist, streamed in
-  real time over a WebSocket (falls back to periodic polling if the stream drops).
+- **Live quotes** for a customizable stock watchlist and crypto watchlist, refreshed via
+  short-interval polling of a batched quote endpoint (serverless-friendly - no persistent
+  WebSocket connection required).
 - **Scrolling market ticker tape** (DOW, S&P 500, NASDAQ, Russell 2000, VIX) along the header.
 - **Candlestick charts** per ticker (5d/1mo/3mo/6mo/1y) drawn on canvas.
 - **Dividend info** (per-share amount, yield, pay frequency, last/ex-dividend dates) via yfinance,
@@ -46,9 +47,11 @@ Visit
 
 ## Project layout
 
-- `server/index.js` — Express app + WebSocket server (`/ws`); serves the frontend and proxies Finnhub/yfinance.
+- `server/app.js` — The Express app itself (all `/api/*` routes + static file serving); no `.listen()` call, so it can be reused by both entrypoints below.
+- `server/index.js` — Local/traditional-host entrypoint: calls `app.listen()` and starts the recurring congressional-disclosure sync job.
+- `api/index.js` — Vercel serverless entrypoint: exports the same Express app with no `.listen()` and no background sync (serverless functions can't host either).
+- `vercel.json` — Rewrites every request to `api/index.js`.
 - `server/finnhub.js` — Finnhub REST API client with in-memory caching.
-- `server/finnhubSocket.js` — Single upstream connection to Finnhub's trade WebSocket, ref-counted subscriptions shared across browser clients.
 - `server/yfinance.js` — Node bridge that calls the Python scripts below via `child_process.execFile`.
 - `server/yfinance_bridge.py` / `server/candles_bridge.py` — Python scripts using yfinance to fetch dividend info and OHLC candles.
 - `server/speculation.js` — Keyword heuristic used to generate the speculation notes.

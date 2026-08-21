@@ -950,57 +950,49 @@ async function loadCongressTrades({ forceRefresh = false } = {}) {
   }
 }
 
-// --- Live price stream (WebSocket) ---
+// --- Live price stream (polling) ---
+// Serverless hosts can't hold a persistent per-client WebSocket, so "live"
+// prices come from polling a batched quote endpoint instead of a pushed feed.
+const LIVE_POLL_MS = 5000;
+const liveSubs = { stock: new Set(), crypto: new Set() };
+let livePollTimer = null;
 
-let liveSocket = null;
-let liveReconnectDelay = 2000;
+function startLivePolling() {
+  watchlist.forEach((symbol) => streamSubscribe(symbol, 'stock'));
+  cryptoWatchlist.forEach((symbol) => streamSubscribe(symbol, 'crypto'));
+  INDEX_ITEMS.forEach(({ symbol }) => streamSubscribe(symbol, 'stock'));
 
-function connectLiveStream() {
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  liveSocket = new WebSocket(`${protocol}//${location.host}/ws`);
-
-  liveSocket.addEventListener('open', () => {
-    liveReconnectDelay = 2000;
-    document.body.classList.add('live-connected');
-    const items = [
-      ...watchlist.map((symbol) => ({ symbol, assetType: 'stock' })),
-      ...cryptoWatchlist.map((symbol) => ({ symbol, assetType: 'crypto' })),
-      ...INDEX_ITEMS.map(({ symbol }) => ({ symbol, assetType: 'stock' })),
-    ];
-    sendStreamMessage('subscribe', items);
-  });
-
-  liveSocket.addEventListener('message', (event) => {
-    let msg;
-    try {
-      msg = JSON.parse(event.data);
-    } catch {
-      return;
-    }
-    if (msg.type === 'trade') applyLiveTrade(msg);
-  });
-
-  liveSocket.addEventListener('close', () => {
-    document.body.classList.remove('live-connected');
-    setTimeout(connectLiveStream, liveReconnectDelay);
-    liveReconnectDelay = Math.min(liveReconnectDelay * 2, 30_000);
-  });
+  pollLiveQuotes();
+  if (livePollTimer) clearInterval(livePollTimer);
+  livePollTimer = setInterval(pollLiveQuotes, LIVE_POLL_MS);
 }
 
-function sendStreamMessage(type, items) {
-  if (!items.length || !liveSocket || liveSocket.readyState !== WebSocket.OPEN) return;
-  liveSocket.send(JSON.stringify({ type, items }));
+async function pollLiveQuotes() {
+  if (!liveSubs.stock.size && !liveSubs.crypto.size) return;
+
+  const params = new URLSearchParams();
+  if (liveSubs.stock.size) params.set('stocks', [...liveSubs.stock].join(','));
+  if (liveSubs.crypto.size) params.set('crypto', [...liveSubs.crypto].join(','));
+
+  try {
+    const { stocks = [], crypto = [] } = await fetchJson(`/api/quotes-batch?${params}`);
+    document.body.classList.add('live-connected');
+    stocks.forEach((q) => applyLiveQuote({ ...q, assetType: 'stock' }));
+    crypto.forEach((q) => applyLiveQuote({ ...q, assetType: 'crypto' }));
+  } catch {
+    document.body.classList.remove('live-connected');
+  }
 }
 
 function streamSubscribe(symbol, assetType) {
-  sendStreamMessage('subscribe', [{ symbol, assetType }]);
+  liveSubs[assetType]?.add(symbol);
 }
 
 function streamUnsubscribe(symbol, assetType) {
-  sendStreamMessage('unsubscribe', [{ symbol, assetType }]);
+  liveSubs[assetType]?.delete(symbol);
 }
 
-function applyLiveTrade(msg) {
+function applyLiveQuote(msg) {
   const { symbol, assetType, price } = msg;
   const container = assetType === 'crypto' ? cryptoDashboardEl : dashboardEl;
   const targets = [container.querySelector(`.ticker-card[data-symbol="${CSS.escape(symbol)}"]`)];
@@ -1180,7 +1172,7 @@ renderCryptoDashboard();
 renderTickerTape();
 loadTickerTape();
 loadCongressTrades();
-connectLiveStream();
+startLivePolling();
 
 setInterval(() => {
   watchlist.forEach(loadCard);
