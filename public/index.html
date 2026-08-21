@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>fin_app — live dashboard</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="stars-field" id="stars-field" aria-hidden="true"></div>
+    <div class="brand">
+      <img src="/assets/logo.png" alt="Lunar Logic" class="brand-logo" />
+    </div>
+  </header>
+
+  <div class="ticker-tape" id="ticker-tape" aria-label="Market indices">
+    <div class="ticker-tape-track" id="ticker-tape-track"></div>
+  </div>
+
+  <main>
+    <nav class="tab-nav" role="tablist" aria-label="Sections">
+      <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-tab="stocks">Stocks</button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="crypto">Crypto</button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="congress">Congressional Trades</button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tools">Tools</button>
+    </nav>
+
+    <section class="tab-panel active" id="tab-stocks" role="tabpanel">
+      <section class="section-heading">
+        <h2>Stocks</h2>
+        <form id="add-ticker-form" class="add-ticker-form" autocomplete="off">
+          <input id="ticker-input" type="text" placeholder="Add ticker (e.g. AAPL)" maxlength="10" />
+          <button type="submit">Add</button>
+        </form>
+      </section>
+      <section class="watchlist-bar" id="watchlist-bar" aria-label="Watchlist"></section>
+      <section class="dashboard" id="dashboard" aria-label="Ticker dashboard"></section>
+    </section>
+
+    <section class="tab-panel" id="tab-crypto" role="tabpanel" hidden>
+      <section class="section-heading">
+        <h2>Crypto</h2>
+        <form id="add-crypto-form" class="add-ticker-form" autocomplete="off">
+          <input id="crypto-input" type="text" placeholder="Add coin (e.g. BTC)" maxlength="10" />
+          <button type="submit">Add</button>
+        </form>
+      </section>
+      <section class="watchlist-bar" id="crypto-watchlist-bar" aria-label="Crypto watchlist"></section>
+      <section class="dashboard" id="crypto-dashboard" aria-label="Crypto dashboard"></section>
+    </section>
+
+    <section class="tab-panel" id="tab-congress" role="tabpanel" hidden>
+      <section class="congress-section">
+        <div class="congress-header">
+          <h2>Congressional Trades</h2>
+          <div class="congress-controls">
+            <label for="congress-ticker-filter">Filter by ticker</label>
+            <select id="congress-ticker-filter">
+              <option value="">Recent activity (all tickers)</option>
+            </select>
+            <input id="congress-ticker-custom" type="text" placeholder="or type any symbol…" maxlength="10" />
+            <label for="congress-rep-filter">Representative</label>
+            <input id="congress-rep-filter" type="text" placeholder="Search by name…" maxlength="100" />
+            <button id="congress-refresh">Refresh</button>
+          </div>
+        </div>
+        <p id="congress-updated" class="muted small congress-updated"></p>
+        <div id="congress-body" class="congress-body">
+          <p class="muted">Loading recent congressional trading activity (House Stock Watcher)…</p>
+        </div>
+      </section>
+    </section>
+
+    <section class="tab-panel" id="tab-tools" role="tabpanel" hidden>
+      <section class="dividend-calc-section">
+        <h2>Dividend Calculator</h2>
+        <p class="muted small">Enter a ticker, how many shares you own (or plan to buy), and your average cost per share to estimate dividend income.</p>
+        <form id="dividend-calc-form" class="dividend-calc-form" autocomplete="off">
+          <div>
+            <label for="dividend-calc-symbol">Ticker</label>
+            <input id="dividend-calc-symbol" type="text" placeholder="e.g. KO" maxlength="10" required />
+          </div>
+          <div>
+            <label for="dividend-calc-shares">Qty</label>
+            <input id="dividend-calc-shares" type="text" inputmode="decimal" placeholder="100" required />
+          </div>
+          <div>
+            <label for="dividend-calc-amount">Avg. Cost ($)</label>
+            <input id="dividend-calc-amount" type="text" inputmode="decimal" placeholder="58.32" required />
+          </div>
+          <button type="submit">Calculate</button>
+        </form>
+        <div id="dividend-calc-result" class="dividend-calc-result"></div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    Data via <a href="https://finnhub.io/" target="_blank" rel="noopener noreferrer">Finnhub.io</a>. Speculation notes are a local keyword heuristic, not financial advice.
+  </footer>
+
+  <div class="modal-overlay" id="ticker-modal-overlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Ticker details">
+      <button type="button" class="modal-close" id="ticker-modal-close" aria-label="Close">×</button>
+      <div class="ticker-card modal-ticker-card" id="ticker-modal-body"></div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

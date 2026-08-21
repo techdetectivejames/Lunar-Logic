@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FIN_APP — Live Ticker Dashboard</title>
+<link rel="stylesheet" href="LunarLogic%E2%80%94%20Live%20Ticker%20Dashboard_files/styles_WNTf.css">
+</head>
+<body class="live-connected">
+  <header class="topbar">
+    <div class="brand">
+      <img src="LunarLogic%E2%80%94%20Live%20Ticker%20Dashboard_files/logo_WNTf.png" alt="Lunar Logic" class="brand-logo">
+    </div>
+  </header>
+
+  <div class="ticker-tape" id="ticker-tape" aria-label="Market indices">
+    <div class="ticker-tape-track" id="ticker-tape-track">
+    <div class="tape-item" data-symbol="DIA" data-prev-close="532.91" data-last-price="534.27">
+      <span class="tape-label">DOW</span>
+      <span class="tape-price" data-live="price">534.27</span>
+      <span class="tape-change up" data-live="change" data-base-class="tape-change">1.36 (+0.26%)</span>
+    </div>
+  
+    <div class="tape-item" data-symbol="SPY" data-prev-close="767.45" data-last-price="769.06">
+      <span class="tape-label">S&amp;P 500</span>
+      <span class="tape-price" data-live="price">769.06</span>
+      <span class="tape-change up" data-live="change" data-base-class="tape-change">1.61 (+0.21%)</span>
+    </div>
+  
+    <div class="tape-item" data-symbol="QQQ" data-prev-close="717.51" data-last-price="716.08">
+      <span class="tape-label">NASDAQ</span>
+      <span class="tape-price" data-live="price">716.08</span>
+      <span class="tape-change down" data-live="change" data-base-class="tape-change">-1.43 (-0.20%)</span>
+    </div>
+  
+    <div class="tape-item" data-symbol="IWM" data-prev-close="300.23" data-last-price="301.72">
+      <span class="tape-label">RUSSELL 2000</span>
+      <span class="tape-price" data-live="price">301.72</span>
+      <span class="tape-change up" data-live="change" data-base-class="tape-change">1.49 (+0.50%)</span>
+    </div>
+  
+    <div class="tape-item" data-symbol="VIXY" data-prev-close="18.86" data-last-price="18.31">
+      <span class="tape-label">VIX</span>
+      <span class="tape-price" data-live="price">18.31</span>
+      <span class="tape-change down" data-live="change" data-base-class="tape-change">-0.55 (-2.92%)</span>
+    </div>
+  
+    <div class="tape-item" data-symbol="DIA" data-prev-close="532.91" data-last-price="534.27">
+      <span class="tape-label">DOW</span>
+      <span class="tape-price" data-live="price">534.27</span>
+      <span class="tape-change up" data-live="change" data-base-class="tape-change">1.36 (+0.26%)</span>
+    </div>
+  
+    <div class="tape-item" data-symbol="SPY" data-prev-close="767.45" data-last-price="769.06">
+      <span class="tape-label">S&amp;P 500</span>
+      <span class="tape-price" data-live="price">769.06</span>
+      <span class="tape-change up" data-live="change" data-base-class="tape-change">1.61 (+0.21%)</span>
+    </div>
+  
+    <div class="tape-item" data-symbol="QQQ" data-prev-close="717.51" data-last-price="716.08">
+      <span class="tape-label">NASDAQ</span>
+      <span class="tape-price" data-live="price">716.08</span>
+      <span class="tape-change down" data-live="change" data-base-class="tape-change">-1.43 (-0.20%)</span>
+    </div>
+  
+    <div class="tape-item" data-symbol="IWM" data-prev-close="300.23" data-last-price="301.72">
+      <span class="tape-label">RUSSELL 2000</span>
+      <span class="tape-price" data-live="price">301.72</span>
+      <span class="tape-change up" data-live="change" data-base-class="tape-change">1.49 (+0.50%)</span>
+    </div>
+  
+    <div class="tape-item" data-symbol="VIXY" data-prev-close="18.86" data-last-price="18.31">
+      <span class="tape-label">VIX</span>
+      <span class="tape-price" data-live="price">18.31</span>
+      <span class="tape-change down" data-live="change" data-base-class="tape-change">-0.55 (-2.92%)</span>
+    </div>
+  </div>
+  </div>
+
+  <main>
+    <nav class="tab-nav" role="tablist" aria-label="Sections">
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="stocks">Stocks</button>
+      <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-tab="crypto">Crypto</button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="congress">Congressional Trades</button>
+    </nav>
+
+    <section class="tab-panel active" id="tab-stocks" role="tabpanel" hidden="">
+      <section class="section-heading">
+        <h2>Stocks</h2>
+        <form id="add-ticker-form" class="add-ticker-form" autocomplete="off">
+          <input id="ticker-input" type="text" placeholder="Add ticker (e.g. AAPL)" maxlength="10">
+          <button type="submit">Add</button>
+        </form>
+      </section>
+      <section class="watchlist-bar" id="watchlist-bar" aria-label="Watchlist">
+    <span class="chip" data-symbol="AAPL">
+      AAPL
+      <button type="button" aria-label="Remove AAPL" data-remove="AAPL">×</button>
+    </span>
+  
+    <span class="chip" data-symbol="TSLA">
+      TSLA
+      <button type="button" aria-label="Remove TSLA" data-remove="TSLA">×</button>
+    </span>
+  
+    <span class="chip" data-symbol="NVDA">
+      NVDA
+      <button type="button" aria-label="Remove NVDA" data-remove="NVDA">×</button>
+    </span>
+  </section>
+      <section class="dashboard" id="dashboard" aria-label="Ticker dashboard">
+    <article class="ticker-card" data-symbol="AAPL" data-asset-type="stock" data-prev-close="310.03" data-last-price="316.83">
+      <div class="ticker-card-head">
+        <div>
+          <div class="ticker-symbol">AAPL <span class="live-dot" data-live="badge" title="Live price stream"></span></div>
+          <div class="ticker-name">Apple Inc</div>
+        </div>
+        <div style="text-align:right">
+          <div class="price" data-live="price">316.83</div>
+          <div class="change up" data-live="change">6.80 (+2.19%)</div>
+        </div>
+      </div>
+      <div class="quote-grid">
+        <div>Open<span>310.14</span></div>
+        <div>High<span>319.28</span></div>
+        <div>Low<span>309.60</span></div>
+        <div>Prev Close<span>310.03</span></div>
+        <div>Market Cap<span>4,623,874M</span></div>
+        <div>Exchange<span>NASDAQ NMS - GLOBAL MARKET</span></div>
+      </div>
+      
+    <div class="chart-block">
+      <div class="chart-header">
+        <strong>Price Chart</strong>
+        <div class="period-buttons">
+    <button type="button" class="period-btn" data-symbol="AAPL" data-period="5d">5d</button>
+  
+    <button type="button" class="period-btn active" data-symbol="AAPL" data-period="1mo">1mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="AAPL" data-period="3mo">3mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="AAPL" data-period="6mo">6mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="AAPL" data-period="1y">1y</button>
+  </div>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas class="candle-canvas" data-symbol="AAPL" width="446" height="195"></canvas>
+        <div class="chart-tooltip" hidden=""></div>
+      </div>
+    </div>
+  
+      
+    <div class="dividend-block">
+      <strong>Dividend</strong>
+      <div class="dividend-grid">
+        <div>Per Share (Annual)<span>$1.08</span></div>
+        <div>Yield<span>0.34%</span></div>
+        <div>Pay Frequency<span>Quarterly</span></div>
+        <div>Payout Ratio<span>12.04%</span></div>
+        <div>Last Paid<span>$0.27 · 2026-08-10</span></div>
+        <div>Ex-Dividend<span>2026-08-10</span></div>
+      </div>
+    </div>
+  
+      
+    <div class="predictions-block">
+      <strong>Incoming Predictions</strong>
+      <div class="predictions-grid">
+      <div>Next Earnings<span>2026-10-28 (AMC)</span></div>
+      <div>EPS Estimate<span>$2.02</span></div>
+      <div>Revenue Estimate<span>$115.06B</span></div>
+    </div>
+      
+      <div class="rec-consensus Buy">
+        Analyst consensus: <strong>Buy</strong>
+        <span class="muted">(as of 2026-08-01)</span>
+      </div>
+      <div class="rec-bars">
+        <div class="rec-bar strongbuy" style="flex:13" title="Strong Buy: 13"></div>
+        <div class="rec-bar buy" style="flex:24" title="Buy: 24"></div>
+        <div class="rec-bar hold" style="flex:14" title="Hold: 14"></div>
+        <div class="rec-bar sell" style="flex:3" title="Sell: 3"></div>
+        <div class="rec-bar strongsell" style="flex:0" title="Strong Sell: 0"></div>
+      </div>
+    
+    </div>
+  
+      <div class="news-list">
+        <strong>Stock News &amp; Speculation</strong>
+        
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=06bc9619bf53a11a041c1a94ae5eb97fa03663fcef161e2b5f6c6836998b06d4" target="_blank" rel="noopener noreferrer">What's going on in today's session: S&amp;P500 most active stocks</a>
+      <div class="news-meta">ChartMill · 8h ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=a53cd1f5883972a76c50bbb639d04690497dfa9d3cc4c64befd2cd557bc9cbf6" target="_blank" rel="noopener noreferrer">These dow jones stocks are moving in today's session</a>
+      <div class="news-meta">ChartMill · 9h ago</div>
+      
+    <div class="speculation Bullish">
+      <span class="speculation-tag">Bullish speculation:</span>
+      Language leans positive (matched: gain). Possible upside speculation.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=85690539df1f074b0141508ef60dd8720ee3792d4601920da3731c6695610e5e" target="_blank" rel="noopener noreferrer">Investors Should Position For Humanoid Robot Boom—Here's A Picks-And-Shovels Play; First mRNA Cancer Vaccine Succeeds</a>
+      <div class="news-meta">Benzinga · 13h ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=f3bac775314cca96badd075dba2e49684c8374ddc4c498d368d720281f12a604" target="_blank" rel="noopener noreferrer">Apple Is The Most Underappreciated AI Mega-Cap, Analyst Says</a>
+      <div class="news-meta">Benzinga · 13h ago</div>
+      
+    <div class="speculation Bullish">
+      <span class="speculation-tag">Bullish speculation:</span>
+      Language leans positive (matched: surge, surges). Possible upside speculation.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=c0ad22dbeb40a99d1be67866b1c32073260e5b7b10cee75e9a304ba201633d39" target="_blank" rel="noopener noreferrer">Alphabet Raises $3.9B in First Australian Bond Sale as AI Spending Surges</a>
+      <div class="news-meta">Benzinga · 15h ago</div>
+      
+    <div class="speculation Bullish">
+      <span class="speculation-tag">Bullish speculation:</span>
+      Language leans positive (matched: surge, surges). Possible upside speculation.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=d3e68ad50cd62bb2eda41d53822a55b0ed049f85c81afb4a03b02db6193e0b92" target="_blank" rel="noopener noreferrer">Taiwan Semiconductor’s AI Bottleneck Hands Samsung a Powerful Pricing Opportunity</a>
+      <div class="news-meta">Benzinga · 16h ago</div>
+      
+    <div class="speculation Bullish">
+      <span class="speculation-tag">Bullish speculation:</span>
+      Language leans positive (matched: profit, boost). Possible upside speculation.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=d91407559e392008e6c1561486f20a4c2b1274c8e91be33315c029a286fc1e32" target="_blank" rel="noopener noreferrer">Why Apple Is the Blueprint for SK Hynix's AI Cash Mountain</a>
+      <div class="news-meta">Benzinga · 18h ago</div>
+      
+    <div class="speculation Bullish">
+      <span class="speculation-tag">Bullish speculation:</span>
+      Language leans positive (matched: profit, buyback). Possible upside speculation.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=a3bb6cd630ec2a4bd5a6d934e43d9e3da5708072a77c7d7e49fc5d728e1dcda8" target="_blank" rel="noopener noreferrer">Klarna Stock Tries to Stabilize After 23% Plunge As German Shoppers Spoil the Party</a>
+      <div class="news-meta">Benzinga · 19h ago</div>
+      
+    <div class="speculation Bearish">
+      <span class="speculation-tag">Bearish speculation:</span>
+      Language leans negative (matched: plunge, selloff). Possible downside speculation.
+    </div>
+  
+    </div>
+  
+      </div>
+    </article>
+  
+    <article class="ticker-card" data-symbol="TSLA" data-asset-type="stock" data-prev-close="336.87" data-last-price="351.12">
+      <div class="ticker-card-head">
+        <div>
+          <div class="ticker-symbol">TSLA <span class="live-dot" data-live="badge" title="Live price stream"></span></div>
+          <div class="ticker-name">Tesla Inc</div>
+        </div>
+        <div style="text-align:right">
+          <div class="price" data-live="price">351.12</div>
+          <div class="change up" data-live="change">14.25 (+4.23%)</div>
+        </div>
+      </div>
+      <div class="quote-grid">
+        <div>Open<span>338.89</span></div>
+        <div>High<span>351.62</span></div>
+        <div>Low<span>335.70</span></div>
+        <div>Prev Close<span>336.87</span></div>
+        <div>Market Cap<span>1,386,765M</span></div>
+        <div>Exchange<span>NASDAQ NMS - GLOBAL MARKET</span></div>
+      </div>
+      
+    <div class="chart-block">
+      <div class="chart-header">
+        <strong>Price Chart</strong>
+        <div class="period-buttons">
+    <button type="button" class="period-btn" data-symbol="TSLA" data-period="5d">5d</button>
+  
+    <button type="button" class="period-btn active" data-symbol="TSLA" data-period="1mo">1mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="TSLA" data-period="3mo">3mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="TSLA" data-period="6mo">6mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="TSLA" data-period="1y">1y</button>
+  </div>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas class="candle-canvas" data-symbol="TSLA" width="446" height="195"></canvas>
+        <div class="chart-tooltip" hidden=""></div>
+      </div>
+    </div>
+  
+      
+      <div class="dividend-block no-dividend">
+        <strong>Dividend</strong>
+        <p class="muted">No dividend currently paid.</p>
+      </div>
+    
+      
+    <div class="predictions-block">
+      <strong>Incoming Predictions</strong>
+      <div class="predictions-grid">
+      <div>Next Earnings<span>2026-10-20 (AMC)</span></div>
+      <div>EPS Estimate<span>$0.44</span></div>
+      <div>Revenue Estimate<span>$28.34B</span></div>
+    </div>
+      
+      <div class="rec-consensus Buy">
+        Analyst consensus: <strong>Buy</strong>
+        <span class="muted">(as of 2026-08-01)</span>
+      </div>
+      <div class="rec-bars">
+        <div class="rec-bar strongbuy" style="flex:10" title="Strong Buy: 10"></div>
+        <div class="rec-bar buy" style="flex:20" title="Buy: 20"></div>
+        <div class="rec-bar hold" style="flex:24" title="Hold: 24"></div>
+        <div class="rec-bar sell" style="flex:6" title="Sell: 6"></div>
+        <div class="rec-bar strongsell" style="flex:1" title="Strong Sell: 1"></div>
+      </div>
+    
+    </div>
+  
+      <div class="news-list">
+        <strong>Stock News &amp; Speculation</strong>
+        
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=6176cf1f3006a9b7f1e7eece33e01b74901f7d28aa6591f2ed6baa2cc5a017ee" target="_blank" rel="noopener noreferrer">Tracking Cathie Wood's ARK Invest 13F Portfolio - Q2 2026 Update</a>
+      <div class="news-meta">SeekingAlpha · 5h ago</div>
+      
+    <div class="speculation Bullish">
+      <span class="speculation-tag">Bullish speculation:</span>
+      Language leans positive (matched: rose). Possible upside speculation.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=06bc9619bf53a11a041c1a94ae5eb97fa03663fcef161e2b5f6c6836998b06d4" target="_blank" rel="noopener noreferrer">What's going on in today's session: S&amp;P500 most active stocks</a>
+      <div class="news-meta">ChartMill · 8h ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=e551fabc0eaf1bf604fb78bf3da7ac26bae8cd8888398860076567dbc0a75d32" target="_blank" rel="noopener noreferrer">Samsung Tumbled Nearly 8% in Seoul Even as AI Demand Drives Chip Prices Up To 15%</a>
+      <div class="news-meta">Benzinga · 9h ago</div>
+      
+    <div class="speculation Bearish">
+      <span class="speculation-tag">Bearish speculation:</span>
+      Language leans negative (matched: tumble, tumbled, fell). Possible downside speculation.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=cb840a894cd79e910eafcac35ab8ad5e7b7d3d6e8dcab2b1ed09c8d45c9ae444" target="_blank" rel="noopener noreferrer">Elon Musk Is No Longer a Trillionaire, but He Could Still Give Every Person on Earth $69.420 and Stay the World's Richest</a>
+      <div class="news-meta">Benzinga · 10h ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=e52d1c52a67473b926a5dc82fbab6706912661f1cdaf7a07b1f376ccb286c62d" target="_blank" rel="noopener noreferrer">Tesla: No One Is Paying Attention</a>
+      <div class="news-meta">SeekingAlpha · 12h ago</div>
+      
+    <div class="speculation Bearish">
+      <span class="speculation-tag">Bearish speculation:</span>
+      Language leans negative (matched: decline). Possible downside speculation.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=85690539df1f074b0141508ef60dd8720ee3792d4601920da3731c6695610e5e" target="_blank" rel="noopener noreferrer">Investors Should Position For Humanoid Robot Boom—Here's A Picks-And-Shovels Play; First mRNA Cancer Vaccine Succeeds</a>
+      <div class="news-meta">Benzinga · 13h ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=62d1b739860b3706d50c6862e2b99ac2589823059104be5866adcb12c36093ff" target="_blank" rel="noopener noreferrer">Cathie Wood Says Elon Musk's Tesla Playbook Explains Why She's Avoiding SK Hynix and Micron</a>
+      <div class="news-meta">Benzinga · 14h ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=d3e68ad50cd62bb2eda41d53822a55b0ed049f85c81afb4a03b02db6193e0b92" target="_blank" rel="noopener noreferrer">Taiwan Semiconductor’s AI Bottleneck Hands Samsung a Powerful Pricing Opportunity</a>
+      <div class="news-meta">Benzinga · 16h ago</div>
+      
+    <div class="speculation Bullish">
+      <span class="speculation-tag">Bullish speculation:</span>
+      Language leans positive (matched: profit, boost). Possible upside speculation.
+    </div>
+  
+    </div>
+  
+      </div>
+    </article>
+  
+    <article class="ticker-card" data-symbol="NVDA" data-asset-type="stock" data-prev-close="219.74" data-last-price="217.56">
+      <div class="ticker-card-head">
+        <div>
+          <div class="ticker-symbol">NVDA <span class="live-dot" data-live="badge" title="Live price stream"></span></div>
+          <div class="ticker-name">NVIDIA Corp</div>
+        </div>
+        <div style="text-align:right">
+          <div class="price" data-live="price">217.56</div>
+          <div class="change down" data-live="change">-2.18 (-0.99%)</div>
+        </div>
+      </div>
+      <div class="quote-grid">
+        <div>Open<span>221.67</span></div>
+        <div>High<span>222.87</span></div>
+        <div>Low<span>216.76</span></div>
+        <div>Prev Close<span>219.74</span></div>
+        <div>Market Cap<span>5,264,952M</span></div>
+        <div>Exchange<span>NASDAQ NMS - GLOBAL MARKET</span></div>
+      </div>
+      
+    <div class="chart-block">
+      <div class="chart-header">
+        <strong>Price Chart</strong>
+        <div class="period-buttons">
+    <button type="button" class="period-btn" data-symbol="NVDA" data-period="5d">5d</button>
+  
+    <button type="button" class="period-btn active" data-symbol="NVDA" data-period="1mo">1mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="NVDA" data-period="3mo">3mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="NVDA" data-period="6mo">6mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="NVDA" data-period="1y">1y</button>
+  </div>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas class="candle-canvas" data-symbol="NVDA" width="446" height="195"></canvas>
+        <div class="chart-tooltip" hidden=""></div>
+      </div>
+    </div>
+  
+      
+    <div class="dividend-block">
+      <strong>Dividend</strong>
+      <div class="dividend-grid">
+        <div>Per Share (Annual)<span>$1.00</span></div>
+        <div>Yield<span>0.46%</span></div>
+        <div>Pay Frequency<span>Quarterly</span></div>
+        <div>Payout Ratio<span>0.61%</span></div>
+        <div>Last Paid<span>$0.25 · 2026-06-04</span></div>
+        <div>Ex-Dividend<span>2026-06-04</span></div>
+      </div>
+    </div>
+  
+      
+    <div class="predictions-block">
+      <strong>Incoming Predictions</strong>
+      <div class="predictions-grid">
+      <div>Next Earnings<span>2026-08-26 (AMC)</span></div>
+      <div>EPS Estimate<span>$2.13</span></div>
+      <div>Revenue Estimate<span>$93.63B</span></div>
+    </div>
+      
+      <div class="rec-consensus StrongBuy">
+        Analyst consensus: <strong>Strong Buy</strong>
+        <span class="muted">(as of 2026-08-01)</span>
+      </div>
+      <div class="rec-bars">
+        <div class="rec-bar strongbuy" style="flex:23" title="Strong Buy: 23"></div>
+        <div class="rec-bar buy" style="flex:41" title="Buy: 41"></div>
+        <div class="rec-bar hold" style="flex:3" title="Hold: 3"></div>
+        <div class="rec-bar sell" style="flex:1" title="Sell: 1"></div>
+        <div class="rec-bar strongsell" style="flex:0" title="Strong Sell: 0"></div>
+      </div>
+    
+    </div>
+  
+      <div class="news-list">
+        <strong>Stock News &amp; Speculation</strong>
+        
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=40115c3c3464e83a2660ead2dc4dec4295ca940e8503f339c0e49581f3b5cef4" target="_blank" rel="noopener noreferrer">Which dow jones stocks are moving on Wednesday?</a>
+      <div class="news-meta">ChartMill · 7h ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=06bc9619bf53a11a041c1a94ae5eb97fa03663fcef161e2b5f6c6836998b06d4" target="_blank" rel="noopener noreferrer">What's going on in today's session: S&amp;P500 most active stocks</a>
+      <div class="news-meta">ChartMill · 8h ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=709907e313da67eb9297d61718e239cfbac798b8fcaa3222f3077e4bb4eb234f" target="_blank" rel="noopener noreferrer">Which stocks are most active on Wednesday?</a>
+      <div class="news-meta">ChartMill · 8h ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=e551fabc0eaf1bf604fb78bf3da7ac26bae8cd8888398860076567dbc0a75d32" target="_blank" rel="noopener noreferrer">Samsung Tumbled Nearly 8% in Seoul Even as AI Demand Drives Chip Prices Up To 15%</a>
+      <div class="news-meta">Benzinga · 9h ago</div>
+      
+    <div class="speculation Bearish">
+      <span class="speculation-tag">Bearish speculation:</span>
+      Language leans negative (matched: tumble, tumbled, fell). Possible downside speculation.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=f3b54bed45cae16d5770db0c5b6a6167e474b3acd789e09a814bf92dc512a5f8" target="_blank" rel="noopener noreferrer">'China
+ Eases Limits On NVIDIA H200 Chips As AI Race Escalates; Beijing Permits
+ Small Shipments To Help Leading Tech Groups In Drive To Catch Up With 
+U.S. Rivals' - Financial Times</a>
+      <div class="news-meta">Benzinga · 9h ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=a53cd1f5883972a76c50bbb639d04690497dfa9d3cc4c64befd2cd557bc9cbf6" target="_blank" rel="noopener noreferrer">These dow jones stocks are moving in today's session</a>
+      <div class="news-meta">ChartMill · 9h ago</div>
+      
+    <div class="speculation Bullish">
+      <span class="speculation-tag">Bullish speculation:</span>
+      Language leans positive (matched: gain). Possible upside speculation.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=3d43c746f0dbb97241e734fe4bda17e4e10a8f572faa86b8719fb158727659c3" target="_blank" rel="noopener noreferrer">Marvell Won Alphabet's Deal; Everything Changes (Upgrade)</a>
+      <div class="news-meta">SeekingAlpha · 12h ago</div>
+      
+    <div class="speculation Bullish">
+      <span class="speculation-tag">Bullish speculation:</span>
+      Language leans positive (matched: upgrade, bullish). Possible upside speculation.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://finnhub.io/api/news?id=de83141ce2b10055fe3032abde94416522ff165022812de1ec89e1dfbfd67b59" target="_blank" rel="noopener noreferrer">8 Information Technology Stocks With Whale Alerts In Today’s Session</a>
+      <div class="news-meta">Benzinga · 12h ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+      </div>
+    </article>
+  </section>
+    </section>
+
+    <section class="tab-panel" id="tab-crypto" role="tabpanel">
+      <section class="section-heading">
+        <h2>Crypto</h2>
+        <form id="add-crypto-form" class="add-ticker-form" autocomplete="off">
+          <input id="crypto-input" type="text" placeholder="Add coin (e.g. BTC)" maxlength="10">
+          <button type="submit">Add</button>
+        </form>
+      </section>
+      <section class="watchlist-bar" id="crypto-watchlist-bar" aria-label="Crypto watchlist">
+    <span class="chip" data-symbol="BTC">
+      BTC
+      <button type="button" aria-label="Remove BTC" data-remove-crypto="BTC">×</button>
+    </span>
+  
+    <span class="chip" data-symbol="ETH">
+      ETH
+      <button type="button" aria-label="Remove ETH" data-remove-crypto="ETH">×</button>
+    </span>
+  
+    <span class="chip" data-symbol="SOL">
+      SOL
+      <button type="button" aria-label="Remove SOL" data-remove-crypto="SOL">×</button>
+    </span>
+  </section>
+      <section class="dashboard" id="crypto-dashboard" aria-label="Crypto dashboard">
+    <article class="ticker-card" data-symbol="BTC" data-asset-type="crypto" data-prev-close="64384.58" data-last-price="69502.3">
+      <div class="ticker-card-head">
+        <div>
+          <div class="ticker-symbol">BTC <span class="live-dot" data-live="badge" title="Live price stream"></span></div>
+          <div class="ticker-name">BTC/USD · Binance</div>
+        </div>
+        <div style="text-align:right">
+          <div class="price flash-up" data-live="price">69,502.30</div>
+          <div class="change up" data-live="change">5,117.72 (+7.95%)</div>
+        </div>
+      </div>
+      <div class="quote-grid">
+        <div>Open<span>64,384.58</span></div>
+        <div>High<span>70,000.00</span></div>
+        <div>Low<span>64,166.00</span></div>
+        <div>Prev Close<span>64,384.58</span></div>
+      </div>
+      
+    <div class="chart-block">
+      <div class="chart-header">
+        <strong>Price Chart</strong>
+        <div class="period-buttons">
+    <button type="button" class="period-btn" data-symbol="BTC" data-period="5d">5d</button>
+  
+    <button type="button" class="period-btn active" data-symbol="BTC" data-period="1mo">1mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="BTC" data-period="3mo">3mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="BTC" data-period="6mo">6mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="BTC" data-period="1y">1y</button>
+  </div>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas class="candle-canvas" data-symbol="BTC" width="565" height="195"></canvas>
+        <div class="chart-tooltip" hidden=""></div>
+      </div>
+    </div>
+  
+      <div class="news-list">
+        <strong>Crypto News &amp; Speculation</strong>
+        
+    <div class="news-item">
+      <a href="https://cointelegraph.com/markets/bitcoin-price-100k-standard-chartered-treasury-buybacks?utm_source=rss_feed&amp;utm_medium=rss&amp;utm_campaign=rss_partner_inbound" target="_blank" rel="noopener noreferrer">Standard Chartered analyst eyes $100K BTC as US Treasury doubles long-end buybacks</a>
+      <div class="news-meta">Cointelegraph · 10h ago</div>
+      
+    <div class="speculation Bullish">
+      <span class="speculation-tag">Bullish speculation:</span>
+      Language leans positive (matched: gain, buyback). Possible upside speculation.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://cointelegraph.com/news/metaplanet-expands-bitcoin-treasury-strategy-super-league?utm_source=rss_feed&amp;utm_medium=rss&amp;utm_campaign=rss_partner_inbound" target="_blank" rel="noopener noreferrer">Metaplanet expands Bitcoin treasury strategy to US with 2,100-BTC Nasdaq play</a>
+      <div class="news-meta">Cointelegraph · 1d ago</div>
+      
+    <div class="speculation Bullish">
+      <span class="speculation-tag">Bullish speculation:</span>
+      Language leans positive (matched: rise, expands). Possible upside speculation.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://cointelegraph.com/markets/bitcoin-tags-65k-as-sp-500-rebounds-from-2-week-lows-on-us-iran-rhetoric?utm_source=rss_feed&amp;utm_medium=rss&amp;utm_campaign=rss_partner_inbound" target="_blank" rel="noopener noreferrer">Bitcoin tags $65K as S&amp;P 500 rebounds from 2-week lows on US-Iran rhetoric</a>
+      <div class="news-meta">Cointelegraph · 1d ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://cointelegraph.com/markets/bitcoin-price-spike-to-645k-was-low-volume-liquidity-trap-analysis?utm_source=rss_feed&amp;utm_medium=rss&amp;utm_campaign=rss_partner_inbound" target="_blank" rel="noopener noreferrer">Bitcoin price spike to $64.5K was ‘low-volume liquidity trap’: Analysis</a>
+      <div class="news-meta">Cointelegraph · 1d ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+      </div>
+    </article>
+  
+    <article class="ticker-card" data-symbol="ETH" data-asset-type="crypto" data-prev-close="1910.34" data-last-price="2258.21">
+      <div class="ticker-card-head">
+        <div>
+          <div class="ticker-symbol">ETH <span class="live-dot" data-live="badge" title="Live price stream"></span></div>
+          <div class="ticker-name">ETH/USD · Binance</div>
+        </div>
+        <div style="text-align:right">
+          <div class="price flash-up" data-live="price">2,258.21</div>
+          <div class="change up" data-live="change">347.87 (+18.21%)</div>
+        </div>
+      </div>
+      <div class="quote-grid">
+        <div>Open<span>1,910.34</span></div>
+        <div>High<span>2,333.65</span></div>
+        <div>Low<span>1,906.00</span></div>
+        <div>Prev Close<span>1,910.34</span></div>
+      </div>
+      
+    <div class="chart-block">
+      <div class="chart-header">
+        <strong>Price Chart</strong>
+        <div class="period-buttons">
+    <button type="button" class="period-btn" data-symbol="ETH" data-period="5d">5d</button>
+  
+    <button type="button" class="period-btn active" data-symbol="ETH" data-period="1mo">1mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="ETH" data-period="3mo">3mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="ETH" data-period="6mo">6mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="ETH" data-period="1y">1y</button>
+  </div>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas class="candle-canvas" data-symbol="ETH" width="565" height="195"></canvas>
+        <div class="chart-tooltip" hidden=""></div>
+      </div>
+    </div>
+  
+      <div class="news-list">
+        <strong>Crypto News &amp; Speculation</strong>
+        
+    <div class="news-item">
+      <a href="https://cointelegraph.com/news/falconx-ethena-launch-1b-usde-backed-institutional-lending-facility?utm_source=rss_feed&amp;utm_medium=rss&amp;utm_campaign=rss_partner_inbound" target="_blank" rel="noopener noreferrer">FalconX, Ethena bring USDe backing assets into $1B institutional credit facility</a>
+      <div class="news-meta">Cointelegraph · 8h ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://www.coindesk.com/business/2026/08/19/beyond-crypto-funding-rates-ethena-diversifies-usde-backing-with-usd1-billion-falconx-facility" target="_blank" rel="noopener noreferrer">Beyond crypto funding rates: Ethena diversifies USDe backing with $1 billion FalconX facility</a>
+      <div class="news-meta">CoinDesk · 13h ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://cointelegraph.com/markets/bitcoin-etf-august-net-inflows-approach-1b?utm_source=rss_feed&amp;utm_medium=rss&amp;utm_campaign=rss_partner_inbound" target="_blank" rel="noopener noreferrer">Bitcoin ETFs add $189M as August net inflows approach $1B</a>
+      <div class="news-meta">Cointelegraph · 18h ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://cointelegraph.com/news/interstice-falconx-cross-chain-swap-engine-canton-solana-ethereum-robinhood-chain?utm_source=rss_feed&amp;utm_medium=rss&amp;utm_campaign=rss_partner_inbound" target="_blank" rel="noopener noreferrer">FalconX, Interstice Connect Canton to Ethereum, Solana and Robinhood Chain</a>
+      <div class="news-meta">Cointelegraph · 1d ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://cointelegraph.com/news/neuberger-launches-tokenized-fixed-income-fund-with-securitize?utm_source=rss_feed&amp;utm_medium=rss&amp;utm_campaign=rss_partner_inbound" target="_blank" rel="noopener noreferrer">Neuberger teams with Securitize on multi-chain tokenized fixed-income fund launch</a>
+      <div class="news-meta">Cointelegraph · 1d ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://www.coindesk.com/tech/2026/08/18/ethereum-s-next-upgrade-breaks-the-21-000-gas-rule-wallets-rely-on" target="_blank" rel="noopener noreferrer">Ethereum’s next upgrade breaks the '21,000 gas' rule wallets rely on</a>
+      <div class="news-meta">CoinDesk · 1d ago</div>
+      
+    <div class="speculation Bullish">
+      <span class="speculation-tag">Bullish speculation:</span>
+      Language leans positive (matched: upgrade). Possible upside speculation.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://www.coindesk.com/markets/2026/08/18/monad-an-ethereum-rival-offered-early-investors-up-to-usd60-million-to-cash-out-almost-all-said-no" target="_blank" rel="noopener noreferrer">Monad, an Ethereum rival, offered early investors up to $60 million to cash out. Almost all said no</a>
+      <div class="news-meta">CoinDesk · 1d ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://cointelegraph.com/news/ethereum-foundation-warns-some-tools-may-break-with-glamsterdam-upgrade?utm_source=rss_feed&amp;utm_medium=rss&amp;utm_campaign=rss_partner_inbound" target="_blank" rel="noopener noreferrer">Ethereum Foundation warns some tools may break with Glamsterdam upgrade</a>
+      <div class="news-meta">Cointelegraph · 1d ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+      </div>
+    </article>
+  
+    <article class="ticker-card" data-symbol="SOL" data-asset-type="crypto" data-prev-close="76.88" data-last-price="85.07">
+      <div class="ticker-card-head">
+        <div>
+          <div class="ticker-symbol">SOL <span class="live-dot" data-live="badge" title="Live price stream"></span></div>
+          <div class="ticker-name">SOL/USD · Binance</div>
+        </div>
+        <div style="text-align:right">
+          <div class="price" data-live="price">85.07</div>
+          <div class="change up" data-live="change">8.19 (+10.65%)</div>
+        </div>
+      </div>
+      <div class="quote-grid">
+        <div>Open<span>76.87</span></div>
+        <div>High<span>87.21</span></div>
+        <div>Low<span>76.63</span></div>
+        <div>Prev Close<span>76.88</span></div>
+      </div>
+      
+    <div class="chart-block">
+      <div class="chart-header">
+        <strong>Price Chart</strong>
+        <div class="period-buttons">
+    <button type="button" class="period-btn" data-symbol="SOL" data-period="5d">5d</button>
+  
+    <button type="button" class="period-btn active" data-symbol="SOL" data-period="1mo">1mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="SOL" data-period="3mo">3mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="SOL" data-period="6mo">6mo</button>
+  
+    <button type="button" class="period-btn" data-symbol="SOL" data-period="1y">1y</button>
+  </div>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas class="candle-canvas" data-symbol="SOL" width="565" height="195"></canvas>
+        <div class="chart-tooltip" hidden=""></div>
+      </div>
+    </div>
+  
+      <div class="news-list">
+        <strong>Crypto News &amp; Speculation</strong>
+        
+    <div class="news-item">
+      <a href="https://www.coindesk.com/markets/2026/08/19/solana-leads-bitcoin-and-ether-higher-while-korean-chip-stocks-slide-7" target="_blank" rel="noopener noreferrer">Bitcoin holds $64,000 and solana leads gains amid 7% Korean chip stock slide</a>
+      <div class="news-meta">CoinDesk · 22h ago</div>
+      
+    <div class="speculation Bullish">
+      <span class="speculation-tag">Bullish speculation:</span>
+      Language leans positive (matched: gain, gains). Possible upside speculation.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://cointelegraph.com/news/interstice-falconx-cross-chain-swap-engine-canton-solana-ethereum-robinhood-chain?utm_source=rss_feed&amp;utm_medium=rss&amp;utm_campaign=rss_partner_inbound" target="_blank" rel="noopener noreferrer">FalconX, Interstice Connect Canton to Ethereum, Solana and Robinhood Chain</a>
+      <div class="news-meta">Cointelegraph · 1d ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+    <div class="news-item">
+      <a href="https://cointelegraph.com/news/neuberger-launches-tokenized-fixed-income-fund-with-securitize?utm_source=rss_feed&amp;utm_medium=rss&amp;utm_campaign=rss_partner_inbound" target="_blank" rel="noopener noreferrer">Neuberger teams with Securitize on multi-chain tokenized fixed-income fund launch</a>
+      <div class="news-meta">Cointelegraph · 1d ago</div>
+      
+    <div class="speculation Neutral">
+      <span class="speculation-tag">Neutral speculation:</span>
+      No strong directional language detected - likely informational or mixed signal.
+    </div>
+  
+    </div>
+  
+      </div>
+    </article>
+  </section>
+    </section>
+
+    <section class="tab-panel" id="tab-congress" role="tabpanel" hidden="">
+      <section class="congress-section">
+        <div class="congress-header">
+          <h2>Congressional Trades</h2>
+          <div class="congress-controls">
+            <label for="congress-ticker-filter">Filter by ticker</label>
+            <select id="congress-ticker-filter"><option value="" selected="selected">All watchlist tickers</option><option value="AAPL">AAPL</option><option value="TSLA">TSLA</option><option value="NVDA">NVDA</option></select>
+            <input id="congress-ticker-custom" type="text" placeholder="or type any symbol…" maxlength="10">
+            <button id="congress-refresh">Refresh</button>
+          </div>
+        </div>
+        <div id="congress-body" class="congress-body"><div class="notice">Congressional trading data requires a paid Finnhub plan with access to this endpoint.</div></div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    Data via <a href="https://finnhub.io/" target="_blank" rel="noopener noreferrer">Finnhub.io</a>. Speculation notes are a local keyword heuristic, not financial advice.
+  </footer>
+
+  <script src="LunarLogic%E2%80%94%20Live%20Ticker%20Dashboard_files/app_WNTf.js"></script>
+
+
+</body></html>
