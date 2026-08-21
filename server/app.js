@@ -30,23 +30,6 @@ app.use(express.json());
 
 // --- API routes ---
 
-// TEMPORARY diagnostic route - reports metadata about FINNHUB_API_KEY without
-// ever exposing its value, to debug why production reports it as unset.
-// Remove once the root cause is confirmed.
-app.get('/api/debug-env', (req, res) => {
-  const raw = process.env.FINNHUB_API_KEY;
-  res.json({
-    isSet: raw !== undefined,
-    isTruthy: Boolean(raw),
-    length: typeof raw === 'string' ? raw.length : null,
-    leadingWhitespace: typeof raw === 'string' ? /^\s/.test(raw) : null,
-    trailingWhitespace: typeof raw === 'string' ? /\s$/.test(raw) : null,
-    firstChar: typeof raw === 'string' && raw.length ? raw[0] : null,
-    lastChar: typeof raw === 'string' && raw.length ? raw[raw.length - 1] : null,
-    vercelEnv: process.env.VERCEL_ENV || null,
-  });
-});
-
 app.get('/api/quote', async (req, res) => {
   const symbol = String(req.query.symbol || '').toUpperCase();
   if (!isValidSymbol(symbol)) return res.status(400).json({ error: 'Invalid symbol' });
