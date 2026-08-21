@@ -962,9 +962,23 @@ function startLivePolling() {
   cryptoWatchlist.forEach((symbol) => streamSubscribe(symbol, 'crypto'));
   INDEX_ITEMS.forEach(({ symbol }) => streamSubscribe(symbol, 'stock'));
 
-  pollLiveQuotes();
-  if (livePollTimer) clearInterval(livePollTimer);
-  livePollTimer = setInterval(pollLiveQuotes, LIVE_POLL_MS);
+  schedulePoll(0);
+}
+
+// Back off when polls keep failing (e.g. upstream rate limiting) instead of
+// hammering the batch endpoint every LIVE_POLL_MS regardless.
+let livePollFailures = 0;
+const LIVE_POLL_MAX_MS = 30_000;
+
+function schedulePoll(delay) {
+  if (livePollTimer) clearTimeout(livePollTimer);
+  livePollTimer = setTimeout(async () => {
+    await pollLiveQuotes();
+    const nextDelay = livePollFailures
+      ? Math.min(LIVE_POLL_MS * 2 ** livePollFailures, LIVE_POLL_MAX_MS)
+      : LIVE_POLL_MS;
+    schedulePoll(nextDelay);
+  }, delay);
 }
 
 async function pollLiveQuotes() {
@@ -977,10 +991,12 @@ async function pollLiveQuotes() {
   try {
     const { stocks = [], crypto = [] } = await fetchJson(`/api/quotes-batch?${params}`);
     document.body.classList.add('live-connected');
+    livePollFailures = 0;
     stocks.forEach((q) => applyLiveQuote({ ...q, assetType: 'stock' }));
     crypto.forEach((q) => applyLiveQuote({ ...q, assetType: 'crypto' }));
   } catch {
     document.body.classList.remove('live-connected');
+    livePollFailures = Math.min(livePollFailures + 1, 4);
   }
 }
 

@@ -11,8 +11,32 @@ function getCached(key, ttlMs) {
   return null;
 }
 
+// Regardless of freshness - used as a fallback when Finnhub itself is rate-limiting us.
+function getStale(key) {
+  const entry = cache.get(key);
+  return entry ? entry.data : null;
+}
+
 function setCached(key, data) {
   cache.set(key, { data, time: Date.now() });
+}
+
+// Finnhub's free tier caps requests per minute; the batched quote-polling
+// endpoint can otherwise fire dozens of concurrent calls per poll. Track
+// recent call timestamps so we can fall back to (possibly stale) cached data
+// instead of hammering Finnhub once we're near the limit.
+const REQUEST_TIMESTAMPS = [];
+const RATE_LIMIT_PER_MIN = 55;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+
+function isNearRateLimit() {
+  const cutoff = Date.now() - RATE_LIMIT_WINDOW_MS;
+  while (REQUEST_TIMESTAMPS.length && REQUEST_TIMESTAMPS[0] < cutoff) REQUEST_TIMESTAMPS.shift();
+  return REQUEST_TIMESTAMPS.length >= RATE_LIMIT_PER_MIN;
+}
+
+function recordRequest() {
+  REQUEST_TIMESTAMPS.push(Date.now());
 }
 
 async function finnhubRequest(path, params = {}, ttlMs = 30_000) {
@@ -31,18 +55,33 @@ async function finnhubRequest(path, params = {}, ttlMs = 30_000) {
   const cached = getCached(cacheKey, ttlMs);
   if (cached) return cached;
 
-  const res = await fetch(url.toString());
-  const body = await res.json().catch(() => ({}));
-
-  if (!res.ok || body?.error) {
-    const err = new Error(body?.error || `Finnhub request failed (${res.status})`);
-    err.status = res.status;
-    err.finnhubError = body?.error;
-    throw err;
+  // Already close to Finnhub's rate limit - prefer stale cached data over a
+  // call that's likely to be rejected with a 429.
+  if (isNearRateLimit()) {
+    const stale = getStale(cacheKey);
+    if (stale) return stale;
   }
 
-  setCached(cacheKey, body);
-  return body;
+  try {
+    recordRequest();
+    const res = await fetch(url.toString());
+    const body = await res.json().catch(() => ({}));
+
+    if (!res.ok || body?.error) {
+      const err = new Error(body?.error || `Finnhub request failed (${res.status})`);
+      err.status = res.status;
+      err.finnhubError = body?.error;
+      throw err;
+    }
+
+    setCached(cacheKey, body);
+    return body;
+  } catch (err) {
+    // Rate-limited or transient failure - serve the last known value if we have one.
+    const stale = getStale(cacheKey);
+    if (stale) return stale;
+    throw err;
+  }
 }
 
 function getQuote(symbol) {
