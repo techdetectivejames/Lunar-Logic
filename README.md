@@ -1,4 +1,4 @@
-# FIN_APP
+# Lunar Logic
 
 A finance dashboard backed by the [Finnhub](https://finnhub.io/) API and [yahoo-finance2](https://github.com/gadicc/yahoo-finance2):
 
