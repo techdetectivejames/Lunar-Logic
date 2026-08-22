@@ -738,7 +738,9 @@ body.modal-open { overflow: hidden; }
   .brand-logo { height: 64px; }
   .topbar { padding: 6px 12px; }
 
+  .ticker-tape { padding: 6px 0; }
   .tape-item { padding: 0 14px; font-size: 0.78rem; }
+  .tape-change { font-size: 0.74rem; }
 
   .tab-nav {
     padding: 10px 12px 0;
@@ -794,6 +796,10 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 420px) {
   .brand-logo { height: 48px; }
   .topbar { padding: 4px 10px; }
+
+  .ticker-tape { padding: 4px 0; }
+  .tape-item { padding: 0 10px; font-size: 0.7rem; gap: 5px; }
+  .tape-change { font-size: 0.66rem; }
 }
 
 .pull-refresh-indicator {

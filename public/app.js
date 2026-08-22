@@ -677,12 +677,41 @@ async function loadStockCardDetails(card, symbol, { showNews = false } = {}) {
 async function loadCard(symbol) {
   const card = dashboardEl.querySelector(`.ticker-card[data-symbol="${CSS.escape(symbol)}"]`);
   if (!card) return;
+  card.dataset.lazyLoaded = 'true';
   await fillStockCard(card, symbol, { showNews: false, collapsed: true });
+}
+
+// Cards stacked below the fold (especially mobile's single-column layout)
+// don't fetch a quote until scrolled into view, so a long watchlist doesn't
+// fire a burst of requests all at once and trip provider rate limits.
+function lazyLoadCard(card, loader) {
+  if (!('IntersectionObserver' in window)) {
+    loader();
+    return;
+  }
+  const observer = new IntersectionObserver((entries, obs) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      obs.unobserve(entry.target);
+      loader();
+    });
+  }, { rootMargin: '200px 0px', threshold: 0.01 });
+  observer.observe(card);
+}
+
+function loadedSymbols(containerEl, symbols) {
+  return symbols.filter((symbol) => {
+    const card = containerEl.querySelector(`.ticker-card[data-symbol="${CSS.escape(symbol)}"]`);
+    return card?.dataset.lazyLoaded === 'true';
+  });
 }
 
 function renderDashboard() {
   dashboardEl.innerHTML = watchlist.map(cardSkeleton).join('');
-  watchlist.forEach(loadCard);
+  watchlist.forEach((symbol) => {
+    const card = dashboardEl.querySelector(`.ticker-card[data-symbol="${CSS.escape(symbol)}"]`);
+    if (card) lazyLoadCard(card, () => loadCard(symbol));
+  });
 }
 
 // --- Crypto dashboard cards ---
@@ -763,12 +792,16 @@ async function fillCryptoCard(card, symbol, { showNews = true, collapsed = false
 async function loadCryptoCard(symbol) {
   const card = cryptoDashboardEl.querySelector(`.ticker-card[data-symbol="${CSS.escape(symbol)}"]`);
   if (!card) return;
+  card.dataset.lazyLoaded = 'true';
   await fillCryptoCard(card, symbol, { showNews: false, collapsed: true });
 }
 
 function renderCryptoDashboard() {
   cryptoDashboardEl.innerHTML = cryptoWatchlist.map(cryptoCardSkeleton).join('');
-  cryptoWatchlist.forEach(loadCryptoCard);
+  cryptoWatchlist.forEach((symbol) => {
+    const card = cryptoDashboardEl.querySelector(`.ticker-card[data-symbol="${CSS.escape(symbol)}"]`);
+    if (card) lazyLoadCard(card, () => loadCryptoCard(symbol));
+  });
 }
 
 // --- Ticker detail modal ---
@@ -1305,9 +1338,9 @@ tabButtons.forEach((btn) => {
 function refreshActiveTab() {
   const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
   if (activeTab === 'congress') return loadCongressTrades({ forceRefresh: true });
-  if (activeTab === 'crypto') return Promise.all(cryptoWatchlist.map(loadCryptoCard));
+  if (activeTab === 'crypto') return Promise.all(loadedSymbols(cryptoDashboardEl, cryptoWatchlist).map(loadCryptoCard));
   if (activeTab === 'tools') return Promise.resolve();
-  return Promise.all([...watchlist.map(loadCard), loadTickerTape()]);
+  return Promise.all([...loadedSymbols(dashboardEl, watchlist).map(loadCard), loadTickerTape()]);
 }
 
 if (pullRefreshEl && ('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
@@ -1383,8 +1416,11 @@ loadCongressTrades();
 startLivePolling();
 
 setInterval(() => {
-  watchlist.forEach(loadCard);
-  cryptoWatchlist.forEach(loadCryptoCard);
+  // Only re-poll cards that have actually loaded once (i.e. were scrolled
+  // into view) - re-fetching every off-screen card on a long watchlist would
+  // undo the lazy-load burst reduction above.
+  loadedSymbols(dashboardEl, watchlist).forEach(loadCard);
+  loadedSymbols(cryptoDashboardEl, cryptoWatchlist).forEach(loadCryptoCard);
   loadTickerTape();
 }, REFRESH_MS);
 
