@@ -52,6 +52,7 @@ const dividendCalcLoadBtn = document.getElementById('dividend-calc-load');
 const dividendCalcPreviewEl = document.getElementById('dividend-calc-preview');
 const tabButtons = document.querySelectorAll('.tab-btn');
 const tabPanels = document.querySelectorAll('.tab-panel');
+const pullRefreshEl = document.getElementById('pull-refresh-indicator');
 const tickerTapeTrackEl = document.getElementById('ticker-tape-track');
 const tickerModalOverlayEl = document.getElementById('ticker-modal-overlay');
 const tickerModalBodyEl = document.getElementById('ticker-modal-body');
@@ -1298,6 +1299,75 @@ tabButtons.forEach((btn) => {
     document.querySelectorAll(`#tab-${target} .ticker-card`).forEach(redrawChartForCard);
   });
 });
+
+// --- Pull-to-refresh (touch devices) ---
+
+function refreshActiveTab() {
+  const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+  if (activeTab === 'congress') return loadCongressTrades({ forceRefresh: true });
+  if (activeTab === 'crypto') return Promise.all(cryptoWatchlist.map(loadCryptoCard));
+  if (activeTab === 'tools') return Promise.resolve();
+  return Promise.all([...watchlist.map(loadCard), loadTickerTape()]);
+}
+
+if (pullRefreshEl && ('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
+  const PULL_THRESHOLD = 70;
+  const PULL_MAX = 120;
+  const pullTextEl = pullRefreshEl.querySelector('.pull-refresh-text');
+  let pullStartY = null;
+  let pulling = false;
+  let refreshing = false;
+
+  const setPullDistance = (distance) => {
+    const shown = Math.min(Math.max(distance, 0), PULL_MAX);
+    pullRefreshEl.style.transform = `translateY(${shown - 44}px)`;
+    pullRefreshEl.classList.add('visible');
+    const ready = shown >= PULL_THRESHOLD;
+    pullRefreshEl.classList.toggle('ready', ready);
+    pullTextEl.textContent = ready ? 'Release to refresh' : 'Pull to refresh';
+  };
+
+  const resetPull = () => {
+    pulling = false;
+    pullStartY = null;
+    pullRefreshEl.classList.remove('visible', 'ready', 'dragging');
+    pullRefreshEl.style.transform = '';
+  };
+
+  window.addEventListener('touchstart', (e) => {
+    if (refreshing || window.scrollY > 0 || e.touches.length !== 1) return;
+    pullStartY = e.touches[0].clientY;
+    pulling = true;
+    pullRefreshEl.classList.add('dragging');
+  }, { passive: true });
+
+  window.addEventListener('touchmove', (e) => {
+    if (!pulling || pullStartY === null || refreshing) return;
+    const distance = e.touches[0].clientY - pullStartY;
+    if (distance <= 0 || window.scrollY > 0) { resetPull(); return; }
+    e.preventDefault();
+    setPullDistance(distance);
+  }, { passive: false });
+
+  window.addEventListener('touchend', () => {
+    if (!pulling) return;
+    const wasReady = pullRefreshEl.classList.contains('ready');
+    pullRefreshEl.classList.remove('dragging');
+    if (wasReady) {
+      refreshing = true;
+      pullRefreshEl.classList.add('refreshing');
+      pullTextEl.textContent = 'Refreshing…';
+      pullRefreshEl.style.transform = 'translateY(0)';
+      Promise.resolve(refreshActiveTab()).finally(() => {
+        refreshing = false;
+        pullRefreshEl.classList.remove('refreshing');
+        resetPull();
+      });
+    } else {
+      resetPull();
+    }
+  });
+}
 
 // --- Init ---
 

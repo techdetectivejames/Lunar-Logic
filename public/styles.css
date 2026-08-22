@@ -733,3 +733,99 @@ body.modal-open { overflow: hidden; }
   color: var(--muted);
   font-size: 0.85rem;
 }
+
+@media (max-width: 720px) {
+  .brand-logo { height: 64px; }
+  .topbar { padding: 6px 12px; }
+
+  .tape-item { padding: 0 14px; font-size: 0.78rem; }
+
+  .tab-nav {
+    padding: 10px 12px 0;
+    gap: 2px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab-btn { padding: 8px 10px; font-size: 0.85rem; white-space: nowrap; }
+
+  main { padding: 14px 12px 40px; }
+
+  .section-heading { flex-wrap: wrap; gap: 10px; }
+  .add-ticker-form { flex: 1 1 100%; }
+  .add-ticker-form input { min-width: 0; flex: 1; }
+
+  .dashboard { grid-template-columns: 1fr; gap: 12px; }
+
+  .quote-grid,
+  .dividend-grid,
+  .predictions-grid,
+  .dividend-calc-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .ticker-card.collapsible.expanded .ticker-card-details:not([hidden]) {
+    position: static;
+    margin-top: 12px;
+    box-shadow: none;
+  }
+
+  .congress-section { padding: 14px; }
+  .congress-header { flex-direction: column; align-items: stretch; }
+  .congress-controls { flex-direction: column; align-items: stretch; }
+  .congress-controls select,
+  .congress-controls input,
+  .congress-controls button { width: 100%; }
+
+  .congress-body { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.congress-table { font-size: 0.78rem; }
+  table.congress-table th,
+  table.congress-table td { padding: 6px; }
+  table.congress-table td.trader-cell { min-width: 120px; }
+
+  .dividend-calc-form { flex-direction: column; align-items: stretch; }
+  .dividend-calc-form input { width: 100%; }
+  .dividend-calc-symbol-row input { width: auto; flex: 1; }
+
+  .modal-overlay { padding: 16px 8px; align-items: center; }
+  .modal { max-width: 100%; }
+  .modal-ticker-card { max-height: calc(100vh - 32px); }
+}
+
+@media (max-width: 420px) {
+  .brand-logo { height: 48px; }
+  .topbar { padding: 4px 10px; }
+}
+
+.pull-refresh-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  transform: translateY(-44px);
+  opacity: 0;
+  pointer-events: none;
+}
+.pull-refresh-indicator.visible { opacity: 1; }
+.pull-refresh-indicator.dragging { transition: none; }
+.pull-refresh-indicator:not(.dragging) { transition: transform 0.2s ease, opacity 0.2s ease; }
+.pull-refresh-indicator.ready { color: var(--accent); }
+.pull-refresh-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+}
+.pull-refresh-indicator.refreshing .pull-refresh-spinner { animation: pull-refresh-spin 0.7s linear infinite; }
+@keyframes pull-refresh-spin { to { transform: rotate(360deg); } }
