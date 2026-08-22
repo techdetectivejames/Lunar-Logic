@@ -4,6 +4,7 @@ const STORAGE_KEY = 'finapp.watchlist';
 const DEFAULT_WATCHLIST = ['AAPL', 'TSLA', 'NVDA', 'MSFT'];
 const CRYPTO_STORAGE_KEY = 'finapp.crypto.watchlist';
 const DEFAULT_CRYPTO_WATCHLIST = ['BTC', 'ETH', 'SOL'];
+const MAX_WATCHLIST_SIZE = 12;
 // Lets people type a coin's common name and still resolve to the ticker our
 // data providers (Binance quotes / Yahoo Finance candles) actually recognize.
 const CRYPTO_NAME_ALIASES = {
@@ -89,7 +90,7 @@ function loadWatchlist() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length) return parsed;
+      if (Array.isArray(parsed) && parsed.length) return parsed.slice(0, MAX_WATCHLIST_SIZE);
     }
   } catch { /* ignore malformed storage */ }
   return [...DEFAULT_WATCHLIST];
@@ -106,7 +107,7 @@ function loadCryptoWatchlist() {
     const raw = localStorage.getItem(CRYPTO_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length) return parsed;
+      if (Array.isArray(parsed) && parsed.length) return parsed.slice(0, MAX_WATCHLIST_SIZE);
     }
   } catch { /* ignore malformed storage */ }
   return [...DEFAULT_CRYPTO_WATCHLIST];
@@ -175,6 +176,10 @@ function addTicker(symbolRaw) {
     return;
   }
   if (watchlist.includes(symbol)) return;
+  if (watchlist.length >= MAX_WATCHLIST_SIZE) {
+    alert(`You can track up to ${MAX_WATCHLIST_SIZE} stocks at a time. Remove one before adding another.`);
+    return;
+  }
   watchlist.push(symbol);
   saveWatchlist(watchlist);
   renderWatchlistBar();
@@ -212,6 +217,10 @@ function addCrypto(symbolRaw) {
     return;
   }
   if (cryptoWatchlist.includes(symbol)) return;
+  if (cryptoWatchlist.length >= MAX_WATCHLIST_SIZE) {
+    alert(`You can track up to ${MAX_WATCHLIST_SIZE} coins at a time. Remove one before adding another.`);
+    return;
+  }
   cryptoWatchlist.push(symbol);
   saveCryptoWatchlist(cryptoWatchlist);
   renderCryptoWatchlistBar();
