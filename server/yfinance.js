@@ -80,6 +80,38 @@ function getDividendInfo(symbol) {
   });
 }
 
+const quoteCache = new Map();
+const QUOTE_TTL_MS = 15_000;
+
+// Backup quote source used when Finnhub is unavailable/rate-limited. Field
+// names are mapped to match Finnhub's { c, d, dp, h, l, o, pc, t } shape so
+// callers can treat either source interchangeably.
+function getQuoteAndProfile(symbol) {
+  return withCache(quoteCache, symbol, QUOTE_TTL_MS, async () => {
+    const q = await yahooFinance.quote(symbol);
+    if (!q || q.regularMarketPrice == null) throw new Error(`No quote data for ${symbol}`);
+
+    return {
+      quote: {
+        c: q.regularMarketPrice,
+        d: q.regularMarketChange ?? null,
+        dp: q.regularMarketChangePercent ?? null,
+        h: q.regularMarketDayHigh ?? null,
+        l: q.regularMarketDayLow ?? null,
+        o: q.regularMarketOpen ?? null,
+        pc: q.regularMarketPreviousClose ?? null,
+        t: q.regularMarketTime ? Math.floor(new Date(q.regularMarketTime).getTime() / 1000) : null,
+      },
+      profile: {
+        name: q.longName || q.shortName || symbol,
+        marketCapitalization: typeof q.marketCap === 'number' ? round4(q.marketCap / 1_000_000) : null,
+        exchange: q.fullExchangeName || q.exchange || null,
+      },
+      source: 'yfinance',
+    };
+  });
+}
+
 const PERIOD_DAYS = { '5d': 5, '1mo': 30, '3mo': 90, '6mo': 180, '1y': 365 };
 const candlesCache = new Map();
 const CANDLES_TTL_MS = 5 * 60 * 1000;
@@ -108,5 +140,5 @@ function getCandles(symbol, period) {
   });
 }
 
-module.exports = { getDividendInfo, getCandles };
+module.exports = { getDividendInfo, getQuoteAndProfile, getCandles };
 

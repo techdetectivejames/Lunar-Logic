@@ -39,6 +39,68 @@ function recordRequest() {
   REQUEST_TIMESTAMPS.push(Date.now());
 }
 
+// A single dashboard load fires several Finnhub calls per symbol (quote,
+// profile, news, earnings, recommendations) across every watched ticker at
+// once. Even well under the per-minute cap, Finnhub's free tier also
+// throttles short bursts, so cap how many requests are in flight at a time
+// and queue the rest instead of firing them all simultaneously.
+const MAX_CONCURRENT_REQUESTS = 4;
+let activeRequests = 0;
+const requestQueue = [];
+
+function runQueued() {
+  if (activeRequests >= MAX_CONCURRENT_REQUESTS || requestQueue.length === 0) return;
+  activeRequests += 1;
+  const { task, resolve, reject } = requestQueue.shift();
+  task().then(resolve, reject).finally(() => {
+    activeRequests -= 1;
+    runQueued();
+  });
+}
+
+function withConcurrencyLimit(task) {
+  return new Promise((resolve, reject) => {
+    requestQueue.push({ task, resolve, reject });
+    runQueued();
+  });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const MAX_RETRIES_ON_429 = 2;
+const RETRY_BASE_DELAY_MS = 500;
+
+async function fetchOnce(url) {
+  recordRequest();
+  const res = await fetch(url);
+  const body = await res.json().catch(() => ({}));
+
+  if (!res.ok || body?.error) {
+    const err = new Error(body?.error || `Finnhub request failed (${res.status})`);
+    err.status = res.status;
+    err.finnhubError = body?.error;
+    throw err;
+  }
+
+  return body;
+}
+
+// Retries transient 429s with a short backoff before giving up, since a
+// burst of concurrent calls can trip Finnhub's rate limiter even when we're
+// nowhere near the per-minute budget.
+async function fetchWithRetry(url) {
+  for (let attempt = 0; attempt <= MAX_RETRIES_ON_429; attempt += 1) {
+    try {
+      return await fetchOnce(url);
+    } catch (err) {
+      if (err.status !== 429 || attempt === MAX_RETRIES_ON_429) throw err;
+      await sleep(RETRY_BASE_DELAY_MS * (attempt + 1));
+    }
+  }
+}
+
 async function finnhubRequest(path, params = {}, ttlMs = 30_000) {
   const apiKey = process.env.FINNHUB_API_KEY;
   if (!apiKey) {
@@ -63,17 +125,7 @@ async function finnhubRequest(path, params = {}, ttlMs = 30_000) {
   }
 
   try {
-    recordRequest();
-    const res = await fetch(url.toString());
-    const body = await res.json().catch(() => ({}));
-
-    if (!res.ok || body?.error) {
-      const err = new Error(body?.error || `Finnhub request failed (${res.status})`);
-      err.status = res.status;
-      err.finnhubError = body?.error;
-      throw err;
-    }
-
+    const body = await withConcurrencyLimit(() => fetchWithRetry(url.toString()));
     setCached(cacheKey, body);
     return body;
   } catch (err) {

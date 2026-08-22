@@ -39,9 +39,16 @@ app.get('/api/quote', async (req, res) => {
       finnhub.getQuote(symbol),
       finnhub.getProfile(symbol).catch(() => ({})),
     ]);
-    res.json({ symbol, quote, profile });
+    res.json({ symbol, quote, profile, source: 'finnhub' });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    // Finnhub down/rate-limited - fall back to Yahoo Finance rather than
+    // surfacing a hard error to the client.
+    try {
+      const fallback = await yfinance.getQuoteAndProfile(symbol);
+      res.json({ symbol, quote: fallback.quote, profile: fallback.profile, source: 'yfinance' });
+    } catch {
+      res.status(err.status || 500).json({ error: err.message });
+    }
   }
 });
 
@@ -191,9 +198,14 @@ app.get('/api/crypto/quote', async (req, res) => {
     if (!quote || (!quote.c && !quote.pc)) {
       return res.status(404).json({ error: `No market data for ${base}` });
     }
-    res.json({ symbol: base, quote });
+    res.json({ symbol: base, quote, source: 'finnhub' });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    try {
+      const fallback = await yfinance.getQuoteAndProfile(`${base}-USD`);
+      res.json({ symbol: base, quote: fallback.quote, source: 'yfinance' });
+    } catch {
+      res.status(err.status || 500).json({ error: err.message });
+    }
   }
 });
 
@@ -298,19 +310,24 @@ app.get('/api/quotes-batch', async (req, res) => {
     .map((s) => s.trim().toUpperCase())
     .filter(isValidCryptoSymbol))].slice(0, MAX_BATCH_SYMBOLS);
 
-  async function safeQuote(symbol, apiSymbol) {
+  async function safeQuote(symbol, apiSymbol, yfinanceSymbol) {
     try {
       const quote = await finnhub.getQuote(apiSymbol);
-      if (!quote || (!quote.c && !quote.pc)) return null;
-      return { symbol, price: quote.c, prevClose: quote.pc };
+      if (quote && (quote.c || quote.pc)) return { symbol, price: quote.c, prevClose: quote.pc };
+    } catch {
+      // fall through to the Yahoo Finance backup below
+    }
+    try {
+      const fallback = await yfinance.getQuoteAndProfile(yfinanceSymbol);
+      return { symbol, price: fallback.quote.c, prevClose: fallback.quote.pc };
     } catch {
       return null;
     }
   }
 
   const [stockQuotes, cryptoQuotes] = await Promise.all([
-    Promise.all(stocks.map((symbol) => safeQuote(symbol, symbol))),
-    Promise.all(crypto.map((symbol) => safeQuote(symbol, `BINANCE:${symbol}USDT`))),
+    Promise.all(stocks.map((symbol) => safeQuote(symbol, symbol, symbol))),
+    Promise.all(crypto.map((symbol) => safeQuote(symbol, `BINANCE:${symbol}USDT`, `${symbol}-USD`))),
   ]);
 
   res.set('Cache-Control', 'no-store');

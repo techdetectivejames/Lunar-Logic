@@ -306,8 +306,11 @@ async function calculateDividend(e) {
   dividendCalcResultEl.innerHTML = '<p class="spinner">Calculating…</p>';
 
   try {
-    const [quoteRes, dividend] = await Promise.all([
-      fetchJson(`/api/quote?symbol=${encodeURIComponent(symbol)}`),
+    // Live price is a nice-to-have (current value/yield), not required for the
+    // core dividend math, so a Finnhub rate-limit on the quote shouldn't fail
+    // the whole calculation - only the dividend lookup is treated as fatal.
+    const [quoteResult, dividend] = await Promise.all([
+      fetchJson(`/api/quote?symbol=${encodeURIComponent(symbol)}`).catch((err) => ({ error: err })),
       fetchJson(`/api/dividend?symbol=${encodeURIComponent(symbol)}`),
     ]);
 
@@ -321,7 +324,7 @@ async function calculateDividend(e) {
       return;
     }
 
-    const currentPrice = quoteRes.quote?.c ?? null;
+    const currentPrice = quoteResult.error ? null : quoteResult.quote?.c ?? null;
     const perShareAnnual = dividend.dividendPerShareAnnual ?? 0;
     const paymentsPerYear = PAYMENTS_PER_YEAR[dividend.frequency] || null;
 
@@ -348,6 +351,7 @@ async function calculateDividend(e) {
         <div>Current Yield<span>${currentYield != null ? fmtPct(currentYield).replace('+', '') : '—'}</span></div>
       </div>
       <p class="muted small">Based on ${escapeHtml(symbol)}'s trailing annual dividend of $${fmtMoney(perShareAnnual)}/share${dividend.exDividendDate ? ` · next ex-dividend date ${escapeHtml(dividend.exDividendDate)}` : ''}. Actual future payouts can change.</p>
+      ${quoteResult.error ? `<p class="muted small">Live price temporarily unavailable (${escapeHtml(quoteResult.error.message)}) - current value/yield omitted.</p>` : ''}
     `;
   } catch (err) {
     dividendCalcResultEl.innerHTML = `<p class="error-text">Failed to calculate: ${escapeHtml(err.message)}</p>`;
