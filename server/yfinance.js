@@ -6,13 +6,65 @@ const YahooFinance = require('yahoo-finance2').default;
 
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
+// A full dashboard load fires a quote + candles + dividend lookup per watched
+// symbol, all at once. That burst reliably trips Yahoo's own rate limiting,
+// so cap concurrency and retry transient 429s with backoff, same as finnhub.js.
+const MAX_CONCURRENT_REQUESTS = 4;
+let activeRequests = 0;
+const requestQueue = [];
+
+function runQueued() {
+  if (activeRequests >= MAX_CONCURRENT_REQUESTS || requestQueue.length === 0) return;
+  activeRequests += 1;
+  const { task, resolve, reject } = requestQueue.shift();
+  task().then(resolve, reject).finally(() => {
+    activeRequests -= 1;
+    runQueued();
+  });
+}
+
+function withConcurrencyLimit(task) {
+  return new Promise((resolve, reject) => {
+    requestQueue.push({ task, resolve, reject });
+    runQueued();
+  });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const MAX_RETRIES_ON_429 = 2;
+const RETRY_BASE_DELAY_MS = 500;
+
+function isRateLimitError(err) {
+  return /429|too many requests/i.test(err?.message || '');
+}
+
+async function withRetry(fn) {
+  for (let attempt = 0; attempt <= MAX_RETRIES_ON_429; attempt += 1) {
+    try {
+      return await withConcurrencyLimit(fn);
+    } catch (err) {
+      if (!isRateLimitError(err) || attempt === MAX_RETRIES_ON_429) throw err;
+      await sleep(RETRY_BASE_DELAY_MS * (attempt + 1));
+    }
+  }
+}
+
 function withCache(cache, key, ttlMs, fn) {
   const entry = cache.get(key);
   if (entry && Date.now() - entry.time < ttlMs) return Promise.resolve(entry.data);
-  return fn().then((data) => {
-    cache.set(key, { data, time: Date.now() });
-    return data;
-  });
+  return withRetry(fn)
+    .then((data) => {
+      cache.set(key, { data, time: Date.now() });
+      return data;
+    })
+    .catch((err) => {
+      // Rate-limited or transient failure - serve the last known value if we have one.
+      if (entry) return entry.data;
+      throw err;
+    });
 }
 
 function toDateStr(value) {
