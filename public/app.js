@@ -47,6 +47,8 @@ const dividendCalcSymbolEl = document.getElementById('dividend-calc-symbol');
 const dividendCalcSharesEl = document.getElementById('dividend-calc-shares');
 const dividendCalcAmountEl = document.getElementById('dividend-calc-amount');
 const dividendCalcResultEl = document.getElementById('dividend-calc-result');
+const dividendCalcLoadBtn = document.getElementById('dividend-calc-load');
+const dividendCalcPreviewEl = document.getElementById('dividend-calc-preview');
 const tabButtons = document.querySelectorAll('.tab-btn');
 const tabPanels = document.querySelectorAll('.tab-panel');
 const tickerTapeTrackEl = document.getElementById('ticker-tape-track');
@@ -360,6 +362,49 @@ async function calculateDividend(e) {
 
 dividendCalcForm.addEventListener('submit', calculateDividend);
 
+// Quick preview (last price + dividend yield) without needing qty/avg cost.
+async function loadDividendPreview() {
+  const symbol = dividendCalcSymbolEl.value.trim().toUpperCase();
+  if (!symbol || !/^[A-Z0-9.\-]{1,10}$/.test(symbol)) {
+    dividendCalcPreviewEl.innerHTML = '<span class="error-text">Enter a valid ticker symbol.</span>';
+    return;
+  }
+
+  dividendCalcPreviewEl.innerHTML = '<span class="spinner">Loading…</span>';
+
+  try {
+    const [quoteResult, dividend] = await Promise.all([
+      fetchJson(`/api/quote?symbol=${encodeURIComponent(symbol)}`).catch((err) => ({ error: err })),
+      fetchJson(`/api/dividend?symbol=${encodeURIComponent(symbol)}`),
+    ]);
+
+    const currentPrice = quoteResult.error ? null : quoteResult.quote?.c ?? null;
+    const priceText = currentPrice != null ? `\$${fmtMoney(currentPrice)}` : '—';
+
+    if (!dividend.paysDividend) {
+      dividendCalcPreviewEl.innerHTML = `
+        <em>${escapeHtml(symbol)} last price:</em> <strong>${priceText}</strong><br/>
+        <span class="muted">Doesn't currently pay a dividend.</span>
+      `;
+      return;
+    }
+
+    const perShareAnnual = dividend.dividendPerShareAnnual ?? 0;
+    const yieldPct = typeof currentPrice === 'number' && currentPrice > 0
+      ? (perShareAnnual / currentPrice) * 100
+      : null;
+
+    dividendCalcPreviewEl.innerHTML = `
+      <em>${escapeHtml(symbol)} last price:</em> <strong>${priceText}</strong><br/>
+      <em>Dividend yield:</em> <strong>${yieldPct != null ? fmtPct(yieldPct).replace('+', '') : '—'}</strong> (\$${fmtMoney(perShareAnnual)} / year)
+    `;
+  } catch (err) {
+    dividendCalcPreviewEl.innerHTML = `<span class="error-text">Failed to load: ${escapeHtml(err.message)}</span>`;
+  }
+}
+
+dividendCalcLoadBtn.addEventListener('click', loadDividendPreview);
+
 function chartBlockHtml(symbol, type = 'stock') {
   const period = cardPeriod.get(`${type}:${symbol}`) || '1mo';
   const buttons = PERIODS.map((p) => `
@@ -531,7 +576,7 @@ function cardSkeleton(symbol) {
   `;
 }
 
-async function fillStockCard(card, symbol, { showNews = true } = {}) {
+async function fillStockCard(card, symbol, { showNews = true, collapsed = false } = {}) {
   try {
     const [quoteRes, newsRes, dividendRes, predictionsRes] = await Promise.all([
       fetchJson(`/api/quote?symbol=${encodeURIComponent(symbol)}`),
@@ -552,37 +597,43 @@ async function fillStockCard(card, symbol, { showNews = true } = {}) {
     const dividendHtml = dividendBlockHtml(dividendRes, q.c);
     const predictionsHtml = predictionsBlockHtml(predictionsRes);
 
+    card.classList.toggle('collapsible', collapsed);
     card.innerHTML = `
-      <div class="ticker-card-head">
-        <div>
-          <div class="ticker-symbol">${escapeHtml(symbol)} <span class="live-dot" data-live="badge" title="Live price stream"></span></div>
-          <div class="ticker-name">${escapeHtml(profile.name || '')}</div>
+      <div class="ticker-card-summary">
+        <div class="ticker-card-head">
+          <div>
+            <div class="ticker-symbol">${escapeHtml(symbol)} <span class="live-dot" data-live="badge" title="Live price stream"></span></div>
+            <div class="ticker-name">${escapeHtml(profile.name || '')}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="price" data-live="price">${fmtMoney(q.c)}</div>
+            <div class="change ${changeClass(change)}" data-live="change">${fmtMoney(change)} (${fmtPct(pct)})</div>
+          </div>
         </div>
-        <div style="text-align:right">
-          <div class="price" data-live="price">${fmtMoney(q.c)}</div>
-          <div class="change ${changeClass(change)}" data-live="change">${fmtMoney(change)} (${fmtPct(pct)})</div>
+        <div class="quote-grid">
+          <div>Open<span>${fmtMoney(q.o)}</span></div>
+          <div>High<span>${fmtMoney(q.h)}</span></div>
+          <div>Low<span>${fmtMoney(q.l)}</span></div>
+          <div>Prev Close<span>${fmtMoney(q.pc)}</span></div>
+          <div>Market Cap<span>${profile.marketCapitalization ? Math.round(profile.marketCapitalization).toLocaleString() + 'M' : '—'}</span></div>
+          <div>Exchange<span>${escapeHtml(profile.exchange || '—')}</span></div>
         </div>
+        ${collapsed ? '<span class="expand-indicator" aria-hidden="true">▾</span>' : ''}
       </div>
-      <div class="quote-grid">
-        <div>Open<span>${fmtMoney(q.o)}</span></div>
-        <div>High<span>${fmtMoney(q.h)}</span></div>
-        <div>Low<span>${fmtMoney(q.l)}</span></div>
-        <div>Prev Close<span>${fmtMoney(q.pc)}</span></div>
-        <div>Market Cap<span>${profile.marketCapitalization ? Math.round(profile.marketCapitalization).toLocaleString() + 'M' : '—'}</span></div>
-        <div>Exchange<span>${escapeHtml(profile.exchange || '—')}</span></div>
+      <div class="ticker-card-details"${collapsed ? ' hidden' : ''}>
+        ${chartBlockHtml(symbol, 'stock')}
+        ${dividendHtml}
+        ${predictionsHtml}
+        ${showNews ? `
+        <div class="news-list">
+          <strong>Stock News &amp; Speculation</strong>
+          ${newsHtml}
+        </div>` : ''}
       </div>
-      ${chartBlockHtml(symbol, 'stock')}
-      ${dividendHtml}
-      ${predictionsHtml}
-      ${showNews ? `
-      <div class="news-list">
-        <strong>Stock News &amp; Speculation</strong>
-        ${newsHtml}
-      </div>` : ''}
     `;
     card.dataset.prevClose = q.pc ?? q.c ?? 0;
     card.dataset.lastPrice = q.c ?? 0;
-    loadChartForCard(card);
+    if (!collapsed) loadChartForCard(card);
     streamSubscribe(symbol, 'stock');
   } catch (err) {
     card.innerHTML = `
@@ -597,7 +648,7 @@ async function fillStockCard(card, symbol, { showNews = true } = {}) {
 async function loadCard(symbol) {
   const card = dashboardEl.querySelector(`.ticker-card[data-symbol="${CSS.escape(symbol)}"]`);
   if (!card) return;
-  await fillStockCard(card, symbol, { showNews: false });
+  await fillStockCard(card, symbol, { showNews: false, collapsed: true });
 }
 
 function renderDashboard() {
@@ -621,7 +672,7 @@ function cryptoCardSkeleton(symbol) {
   `;
 }
 
-async function fillCryptoCard(card, symbol, { showNews = true } = {}) {
+async function fillCryptoCard(card, symbol, { showNews = true, collapsed = false } = {}) {
   try {
     const [quoteRes, newsRes] = await Promise.all([
       fetchJson(`/api/crypto/quote?symbol=${encodeURIComponent(symbol)}`),
@@ -636,33 +687,39 @@ async function fillCryptoCard(card, symbol, { showNews = true } = {}) {
       ? newsRes.items.map(newsItemHtml).join('')
       : '<p class="muted">No recent news found.</p>';
 
+    card.classList.toggle('collapsible', collapsed);
     card.innerHTML = `
-      <div class="ticker-card-head">
-        <div>
-          <div class="ticker-symbol">${escapeHtml(symbol)} <span class="live-dot" data-live="badge" title="Live price stream"></span></div>
-          <div class="ticker-name">${escapeHtml(symbol)}/USD · Binance</div>
+      <div class="ticker-card-summary">
+        <div class="ticker-card-head">
+          <div>
+            <div class="ticker-symbol">${escapeHtml(symbol)} <span class="live-dot" data-live="badge" title="Live price stream"></span></div>
+            <div class="ticker-name">${escapeHtml(symbol)}/USD · Binance</div>
+          </div>
+          <div style="text-align:right">
+            <div class="price" data-live="price">${fmtMoney(q.c)}</div>
+            <div class="change ${changeClass(change)}" data-live="change">${fmtMoney(change)} (${fmtPct(pct)})</div>
+          </div>
         </div>
-        <div style="text-align:right">
-          <div class="price" data-live="price">${fmtMoney(q.c)}</div>
-          <div class="change ${changeClass(change)}" data-live="change">${fmtMoney(change)} (${fmtPct(pct)})</div>
+        <div class="quote-grid">
+          <div>Open<span>${fmtMoney(q.o)}</span></div>
+          <div>High<span>${fmtMoney(q.h)}</span></div>
+          <div>Low<span>${fmtMoney(q.l)}</span></div>
+          <div>Prev Close<span>${fmtMoney(q.pc)}</span></div>
         </div>
+        ${collapsed ? '<span class="expand-indicator" aria-hidden="true">▾</span>' : ''}
       </div>
-      <div class="quote-grid">
-        <div>Open<span>${fmtMoney(q.o)}</span></div>
-        <div>High<span>${fmtMoney(q.h)}</span></div>
-        <div>Low<span>${fmtMoney(q.l)}</span></div>
-        <div>Prev Close<span>${fmtMoney(q.pc)}</span></div>
+      <div class="ticker-card-details"${collapsed ? ' hidden' : ''}>
+        ${chartBlockHtml(symbol, 'crypto')}
+        ${showNews ? `
+        <div class="news-list">
+          <strong>Crypto News &amp; Speculation</strong>
+          ${newsHtml}
+        </div>` : ''}
       </div>
-      ${chartBlockHtml(symbol, 'crypto')}
-      ${showNews ? `
-      <div class="news-list">
-        <strong>Crypto News &amp; Speculation</strong>
-        ${newsHtml}
-      </div>` : ''}
     `;
     card.dataset.prevClose = q.pc ?? q.c ?? 0;
     card.dataset.lastPrice = q.c ?? 0;
-    loadChartForCard(card);
+    if (!collapsed) loadChartForCard(card);
     streamSubscribe(symbol, 'crypto');
   } catch (err) {
     card.innerHTML = `
@@ -677,7 +734,7 @@ async function fillCryptoCard(card, symbol, { showNews = true } = {}) {
 async function loadCryptoCard(symbol) {
   const card = cryptoDashboardEl.querySelector(`.ticker-card[data-symbol="${CSS.escape(symbol)}"]`);
   if (!card) return;
-  await fillCryptoCard(card, symbol, { showNews: false });
+  await fillCryptoCard(card, symbol, { showNews: false, collapsed: true });
 }
 
 function renderCryptoDashboard() {
@@ -1151,6 +1208,32 @@ function handlePeriodClick(e) {
 dashboardEl.addEventListener('click', handlePeriodClick);
 cryptoDashboardEl.addEventListener('click', handlePeriodClick);
 tickerModalBodyEl.addEventListener('click', handlePeriodClick);
+
+function toggleCardExpand(card) {
+  const details = card.querySelector('.ticker-card-details');
+  if (!details) return;
+  const expanding = details.hidden;
+  details.hidden = !expanding;
+  card.classList.toggle('expanded', expanding);
+  card.classList.remove('bounce');
+  void card.offsetWidth; // restart animation
+  card.classList.add('bounce');
+  // chart canvas has zero size while [hidden], so it needs a redraw once visible
+  if (expanding) {
+    if (lastCandles.has(`${card.dataset.assetType || 'stock'}:${card.dataset.symbol}`)) redrawChartForCard(card);
+    else loadChartForCard(card);
+  }
+}
+
+function handleCardSummaryClick(e) {
+  const summary = e.target.closest('.ticker-card-summary');
+  if (!summary) return;
+  const card = summary.closest('.ticker-card.collapsible');
+  if (card) toggleCardExpand(card);
+}
+
+dashboardEl.addEventListener('click', handleCardSummaryClick);
+cryptoDashboardEl.addEventListener('click', handleCardSummaryClick);
 
 window.addEventListener('resize', () => {
   document.querySelectorAll('.ticker-card').forEach(redrawChartForCard);

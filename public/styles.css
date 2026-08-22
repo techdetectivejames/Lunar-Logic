@@ -273,6 +273,39 @@ main { padding: 20px 24px 60px; max-width: 1400px; margin: 0 auto; }
   gap: 12px;
 }
 
+.ticker-card-summary {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ticker-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ticker-card-details[hidden] { display: none; }
+.ticker-card.collapsible .ticker-card-summary { cursor: pointer; }
+.ticker-card.collapsible .ticker-card-summary:hover .ticker-card-head { opacity: 0.9; }
+.ticker-card .expand-indicator {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  transition: transform 0.2s ease;
+}
+.ticker-card.expanded .expand-indicator { transform: rotate(180deg); }
+
+@keyframes card-bounce {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.02); }
+  55% { transform: scale(0.985); }
+  80% { transform: scale(1.008); }
+  100% { transform: scale(1); }
+}
+.ticker-card.bounce { animation: card-bounce 0.4s ease; }
+
 .ticker-card-head {
   display: flex;
   justify-content: space-between;
@@ -541,6 +574,24 @@ table.congress-table td.ticker-cell { font-weight: 700; letter-spacing: 0.02em; 
   font-weight: 600;
 }
 .dividend-calc-form button:hover { opacity: 0.9; }
+.dividend-calc-symbol-row { display: flex; gap: 6px; }
+.dividend-calc-symbol-row input { width: 100px; }
+.dividend-calc-symbol-row button {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.dividend-calc-symbol-row button:hover { opacity: 0.85; }
+.dividend-calc-preview {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  margin: -4px 0 16px;
+}
+.dividend-calc-preview:empty { display: none; }
 .dividend-calc-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

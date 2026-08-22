@@ -79,7 +79,10 @@
         <form id="dividend-calc-form" class="dividend-calc-form" autocomplete="off">
           <div>
             <label for="dividend-calc-symbol">Ticker</label>
-            <input id="dividend-calc-symbol" type="text" placeholder="e.g. KO" maxlength="10" required />
+            <div class="dividend-calc-symbol-row">
+              <input id="dividend-calc-symbol" type="text" placeholder="e.g. KO" maxlength="10" required />
+              <button type="button" id="dividend-calc-load">Load</button>
+            </div>
           </div>
           <div>
             <label for="dividend-calc-shares">Qty</label>
@@ -91,6 +94,7 @@
           </div>
           <button type="submit">Calculate</button>
         </form>
+        <p id="dividend-calc-preview" class="dividend-calc-preview"></p>
         <div id="dividend-calc-result" class="dividend-calc-result"></div>
       </section>
     </section>
