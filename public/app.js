@@ -587,26 +587,15 @@ function cardSkeleton(symbol) {
 
 async function fillStockCard(card, symbol, { showNews = true, collapsed = false } = {}) {
   try {
-    const [quoteRes, newsRes, dividendRes, predictionsRes] = await Promise.all([
-      fetchJson(`/api/quote?symbol=${encodeURIComponent(symbol)}`),
-      showNews ? fetchJson(`/api/news?symbol=${encodeURIComponent(symbol)}`) : Promise.resolve({ items: [] }),
-      fetchJson(`/api/dividend?symbol=${encodeURIComponent(symbol)}`).catch(() => ({ paysDividend: false })),
-      fetchJson(`/api/predictions?symbol=${encodeURIComponent(symbol)}`).catch(() => null),
-    ]);
+    const quoteRes = await fetchJson(`/api/quote?symbol=${encodeURIComponent(symbol)}`);
 
     const q = quoteRes.quote || {};
     const profile = quoteRes.profile || {};
     const change = q.d ?? 0;
     const pct = q.dp ?? 0;
 
-    const newsHtml = newsRes.items?.length
-      ? newsRes.items.map(newsItemHtml).join('')
-      : '<p class="muted">No recent news found.</p>';
-
-    const dividendHtml = dividendBlockHtml(dividendRes, q.c);
-    const predictionsHtml = predictionsBlockHtml(predictionsRes);
-
     card.classList.toggle('collapsible', collapsed);
+    card.dataset.detailsLoaded = 'false';
     card.innerHTML = `
       <div class="ticker-card-summary">
         <div class="ticker-card-head">
@@ -630,20 +619,16 @@ async function fillStockCard(card, symbol, { showNews = true, collapsed = false 
         ${collapsed ? '<span class="expand-indicator" aria-hidden="true">▾</span>' : ''}
       </div>
       <div class="ticker-card-details"${collapsed ? ' hidden' : ''}>
-        ${chartBlockHtml(symbol, 'stock')}
-        ${dividendHtml}
-        ${predictionsHtml}
-        ${showNews ? `
-        <div class="news-list">
-          <strong>Stock News &amp; Speculation</strong>
-          ${newsHtml}
-        </div>` : ''}
+        <p class="spinner">Loading details…</p>
       </div>
     `;
     card.dataset.prevClose = q.pc ?? q.c ?? 0;
     card.dataset.lastPrice = q.c ?? 0;
-    if (!collapsed) loadChartForCard(card);
     streamSubscribe(symbol, 'stock');
+    // Dividend/predictions/news/chart are only fetched once the card is actually
+    // expanded - fetching them for every collapsed dashboard card upfront was
+    // tripping Finnhub/Yahoo's rate limits on a full watchlist load.
+    if (!collapsed) await loadStockCardDetails(card, symbol, { showNews });
   } catch (err) {
     card.innerHTML = `
       <div class="ticker-card-head">
@@ -651,6 +636,40 @@ async function fillStockCard(card, symbol, { showNews = true, collapsed = false 
       </div>
       <p class="error-text">Failed to load: ${escapeHtml(err.message)}</p>
     `;
+  }
+}
+
+async function loadStockCardDetails(card, symbol, { showNews = false } = {}) {
+  const details = card.querySelector('.ticker-card-details');
+  if (!details) return;
+  try {
+    const [newsRes, dividendRes, predictionsRes] = await Promise.all([
+      showNews ? fetchJson(`/api/news?symbol=${encodeURIComponent(symbol)}`) : Promise.resolve({ items: [] }),
+      fetchJson(`/api/dividend?symbol=${encodeURIComponent(symbol)}`).catch(() => ({ paysDividend: false })),
+      fetchJson(`/api/predictions?symbol=${encodeURIComponent(symbol)}`).catch(() => null),
+    ]);
+
+    const newsHtml = newsRes.items?.length
+      ? newsRes.items.map(newsItemHtml).join('')
+      : '<p class="muted">No recent news found.</p>';
+
+    const dividendHtml = dividendBlockHtml(dividendRes, parseFloat(card.dataset.lastPrice) || null);
+    const predictionsHtml = predictionsBlockHtml(predictionsRes);
+
+    details.innerHTML = `
+      ${chartBlockHtml(symbol, 'stock')}
+      ${dividendHtml}
+      ${predictionsHtml}
+      ${showNews ? `
+      <div class="news-list">
+        <strong>Stock News &amp; Speculation</strong>
+        ${newsHtml}
+      </div>` : ''}
+    `;
+    card.dataset.detailsLoaded = 'true';
+    loadChartForCard(card);
+  } catch (err) {
+    details.innerHTML = `<p class="error-text">Failed to load details: ${escapeHtml(err.message)}</p>`;
   }
 }
 
@@ -1227,11 +1246,18 @@ function toggleCardExpand(card) {
   card.classList.remove('bounce');
   void card.offsetWidth; // restart animation
   card.classList.add('bounce');
-  // chart canvas has zero size while [hidden], so it needs a redraw once visible
-  if (expanding) {
-    if (lastCandles.has(`${card.dataset.assetType || 'stock'}:${card.dataset.symbol}`)) redrawChartForCard(card);
-    else loadChartForCard(card);
+  if (!expanding) return;
+
+  const { symbol, assetType = 'stock' } = card.dataset;
+  // Stock cards defer dividend/predictions/news/chart until first expand
+  // to avoid firing those calls for every collapsed card on page load.
+  if (assetType === 'stock' && card.dataset.detailsLoaded !== 'true') {
+    loadStockCardDetails(card, symbol, { showNews: false });
+    return;
   }
+  // chart canvas has zero size while [hidden], so it needs a redraw once visible
+  if (lastCandles.has(`${assetType}:${symbol}`)) redrawChartForCard(card);
+  else loadChartForCard(card);
 }
 
 function handleCardSummaryClick(e) {
