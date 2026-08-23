@@ -58,6 +58,8 @@ const tickerModalOverlayEl = document.getElementById('ticker-modal-overlay');
 const tickerModalBodyEl = document.getElementById('ticker-modal-body');
 const tickerModalCloseEl = document.getElementById('ticker-modal-close');
 const authGateEl = document.getElementById('auth-gate');
+const authOpenBtnEl = document.getElementById('auth-open-btn');
+const authCloseBtnEl = document.getElementById('auth-close-btn');
 const authFormEl = document.getElementById('auth-form');
 const authEmailEl = document.getElementById('auth-email');
 const authPasswordEl = document.getElementById('auth-password');
@@ -1560,9 +1562,9 @@ function initDashboardOnce() {
 
 function enterGuestMode(message = '') {
   currentSession = null;
-  document.body.classList.remove('auth-screen');
   authGateEl.hidden = true;
   authUserControlsEl.hidden = true;
+  authOpenBtnEl.hidden = false;
   setDashboardVisibility(true);
   initDashboardOnce();
   loadTickerTape();
@@ -1575,9 +1577,9 @@ function enterGuestMode(message = '') {
 
 async function onSignedIn(session) {
   currentSession = session;
-  document.body.classList.remove('auth-screen');
   authGateEl.hidden = true;
   authUserControlsEl.hidden = false;
+  authOpenBtnEl.hidden = true;
   authUserEmailEl.textContent = session?.user?.email || session?.user?.id || 'Signed in';
   setDashboardVisibility(true);
   initDashboardOnce();
@@ -1602,21 +1604,28 @@ async function onSignedIn(session) {
 }
 
 function onSignedOut(message = '') {
-  currentSession = null;
-  document.body.classList.add('auth-screen');
+  enterGuestMode(message || 'Signed out.');
   if (watchlistSyncTimer) {
     clearTimeout(watchlistSyncTimer);
     watchlistSyncTimer = null;
   }
-  authGateEl.hidden = false;
-  authUserControlsEl.hidden = true;
-  setDashboardVisibility(false);
-  stopLivePolling();
-  stopBackgroundRefreshLoops();
-  setAuthStatus(message);
 }
 
 async function initAuth() {
+  authOpenBtnEl.addEventListener('click', () => {
+    authGateEl.hidden = false;
+    setRecoveryMode(false);
+    setAuthStatus('');
+    authPasswordEl.value = '';
+    authPasswordEl.focus();
+  });
+
+  authCloseBtnEl.addEventListener('click', () => {
+    authGateEl.hidden = true;
+    setRecoveryMode(false);
+    setAuthStatus('');
+  });
+
   authGuestBtnEl.addEventListener('click', () => {
     enterGuestMode('Guest mode enabled. Sign in anytime to sync your watchlists to Supabase.');
   });
@@ -1732,8 +1741,9 @@ async function initAuth() {
 
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
-        onSignedOut('Set your new password below.');
+        authGateEl.hidden = false;
         setRecoveryMode(true);
+        setAuthStatus('Set your new password below.');
         return;
       }
 
@@ -1745,13 +1755,12 @@ async function initAuth() {
     if (error) throw error;
 
     if (data.session?.access_token) await onSignedIn(data.session);
-    else onSignedOut('Sign in to sync your profile and watchlists, or continue as guest.');
+    else enterGuestMode();
   } catch (err) {
-    onSignedOut('Auth setup failed.');
+    enterGuestMode();
     setAuthStatus(err.message || 'Auth setup failed.', true);
   }
 }
 
-setDashboardVisibility(false);
-document.body.classList.add('auth-screen');
+enterGuestMode();
 initAuth();
