@@ -303,6 +303,18 @@ main { padding: 20px 24px 60px; max-width: 1400px; margin: 0 auto; }
   margin: 0 0 8px;
 }
 
+.auth-card-logo-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 8px;
+}
+
+.auth-card-logo {
+  width: min(245px, 78%);
+  height: auto;
+  display: block;
+}
+
 .auth-form {
   display: grid;
   grid-template-columns: 1fr;
