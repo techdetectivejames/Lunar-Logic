@@ -6,7 +6,7 @@ const finnhub = require('./finnhub');
 const yfinance = require('./yfinance');
 const { analyzeText } = require('./speculation');
 const houseStockWatcher = require('./houseStockWatcher');
-const { getClientConfig, requireAuth } = require('./auth');
+const { getClientConfig, getConfigError, requireAuth } = require('./auth');
 const supabaseStore = require('./supabaseStore');
 
 const app = express();
@@ -34,7 +34,9 @@ app.use(express.json());
 
 app.get('/api/auth/config', (req, res) => {
   const config = getClientConfig();
-  if (!config) return res.status(503).json({ error: 'Supabase auth is not configured on the server.' });
+  if (!config) {
+    return res.status(503).json({ error: getConfigError() || 'Supabase auth is not configured on the server.' });
+  }
   res.set('Cache-Control', 'no-store');
   return res.json(config);
 });

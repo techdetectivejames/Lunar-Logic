@@ -61,8 +61,8 @@ const authGateEl = document.getElementById('auth-gate');
 const authFormEl = document.getElementById('auth-form');
 const authEmailEl = document.getElementById('auth-email');
 const authPasswordEl = document.getElementById('auth-password');
-const authSubmitBtnEl = document.getElementById('auth-submit-btn');
-const authToggleModeBtnEl = document.getElementById('auth-toggle-mode-btn');
+const authLoginBtnEl = document.getElementById('auth-login-btn');
+const authCreateBtnEl = document.getElementById('auth-create-btn');
 const authForgotBtnEl = document.getElementById('auth-forgot-btn');
 const authGuestBtnEl = document.getElementById('auth-guest-btn');
 const authResetFormEl = document.getElementById('auth-reset-form');
@@ -76,7 +76,6 @@ const tabNavEl = document.querySelector('.tab-nav');
 
 let supabaseClient = null;
 let currentSession = null;
-let authMode = 'signin';
 let appStarted = false;
 let appRefreshTimer = null;
 let congressRefreshTimer = null;
@@ -96,25 +95,12 @@ function setDashboardVisibility(isVisible) {
   if (!isVisible) tickerModalOverlayEl.hidden = true;
 }
 
-function setAuthMode(mode) {
-  authMode = mode;
-  const creating = mode === 'signup';
-  authSubmitBtnEl.textContent = creating ? 'Create account' : 'Sign in';
-  authToggleModeBtnEl.textContent = creating ? 'Already have an account? Sign in' : 'Create account instead';
-  authForgotBtnEl.hidden = creating;
-  if (!isRecoveryMode) {
-    authFormEl.hidden = false;
-    authResetFormEl.hidden = true;
-  }
-  setAuthStatus('');
-}
-
 function setRecoveryMode(enabled) {
   isRecoveryMode = enabled;
   authFormEl.hidden = enabled;
   authResetFormEl.hidden = !enabled;
-  authToggleModeBtnEl.hidden = enabled;
   authForgotBtnEl.hidden = enabled;
+  authCreateBtnEl.hidden = enabled;
 }
 
 function getAccessToken() {
@@ -1650,26 +1636,43 @@ async function initAuth() {
       const email = authEmailEl.value.trim();
       const password = authPasswordEl.value;
       if (!email || !password) {
-        setAuthStatus('Email and password are required.', true);
+        setAuthStatus('Username/email and password are required.', true);
         return;
       }
 
-      authSubmitBtnEl.disabled = true;
+      authLoginBtnEl.disabled = true;
       try {
-        if (authMode === 'signup') {
-          const { error } = await supabaseClient.auth.signUp({ email, password });
-          if (error) throw error;
-          setAuthStatus('Account created. Check your email to confirm your account, then sign in.');
-        } else {
-          const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-          if (error) throw error;
-          await onSignedIn(data.session);
-          authPasswordEl.value = '';
-        }
+        const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        await onSignedIn(data.session);
+        authPasswordEl.value = '';
       } catch (err) {
         setAuthStatus(err.message || 'Authentication failed.', true);
       } finally {
-        authSubmitBtnEl.disabled = false;
+        authLoginBtnEl.disabled = false;
+      }
+    });
+
+    authCreateBtnEl.addEventListener('click', async () => {
+      if (!supabaseClient) return;
+      setAuthStatus('');
+
+      const email = authEmailEl.value.trim();
+      const password = authPasswordEl.value;
+      if (!email || !password) {
+        setAuthStatus('Username/email and password are required.', true);
+        return;
+      }
+
+      authCreateBtnEl.disabled = true;
+      try {
+        const { error } = await supabaseClient.auth.signUp({ email, password });
+        if (error) throw error;
+        setAuthStatus('Account created. Check your email to confirm your account, then log in.');
+      } catch (err) {
+        setAuthStatus(err.message || 'Failed to create account.', true);
+      } finally {
+        authCreateBtnEl.disabled = false;
       }
     });
 
@@ -1688,18 +1691,13 @@ async function initAuth() {
         const { error } = await supabaseClient.auth.updateUser({ password });
         if (error) throw error;
         setRecoveryMode(false);
-        setAuthMode('signin');
         authResetPasswordEl.value = '';
-        setAuthStatus('Password updated. You can now sign in.');
+        setAuthStatus('Password updated. You can now log in.');
       } catch (err) {
         setAuthStatus(err.message || 'Failed to update password.', true);
       } finally {
         authResetSubmitBtnEl.disabled = false;
       }
-    });
-
-    authToggleModeBtnEl.addEventListener('click', () => {
-      setAuthMode(authMode === 'signin' ? 'signup' : 'signin');
     });
 
     authForgotBtnEl.addEventListener('click', async () => {
@@ -1745,8 +1743,6 @@ async function initAuth() {
 
     if (data.session?.access_token) await onSignedIn(data.session);
     else onSignedOut('Sign in to sync your profile and watchlists, or continue as guest.');
-
-    setAuthMode('signin');
   } catch (err) {
     onSignedOut('Auth setup failed.');
     setAuthStatus(err.message || 'Auth setup failed.', true);

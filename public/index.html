@@ -35,11 +35,14 @@
         <h2>Sign in to Lunar Logic</h2>
         <p class="muted">Use your account to access your dashboard.</p>
         <form id="auth-form" class="auth-form" autocomplete="on">
-          <label for="auth-email">Email</label>
-          <input id="auth-email" type="email" placeholder="you@example.com" required />
+          <label for="auth-email">Username or Email</label>
+          <input id="auth-email" type="text" placeholder="you@example.com" required />
           <label for="auth-password">Password</label>
           <input id="auth-password" type="password" placeholder="Your password" minlength="6" required />
-          <button type="submit" id="auth-submit-btn">Sign in</button>
+          <div class="auth-submit-row">
+            <button type="submit" id="auth-login-btn">Log in</button>
+            <button type="button" id="auth-create-btn">Create account</button>
+          </div>
         </form>
         <form id="auth-reset-form" class="auth-form" hidden>
           <label for="auth-reset-password">New password</label>
@@ -48,7 +51,6 @@
         </form>
         <div class="auth-actions">
           <button type="button" id="auth-forgot-btn">Forgot password?</button>
-          <button type="button" id="auth-toggle-mode-btn">Create account instead</button>
           <button type="button" id="auth-guest-btn">Continue as guest</button>
         </div>
         <p id="auth-status" class="auth-status muted"></p>

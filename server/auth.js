@@ -5,20 +5,38 @@ const { createRemoteJWKSet, jwtVerify } = require('jose');
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
 
-const isConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+let normalizedSupabaseUrl = null;
+let configError = null;
+
+if (supabaseUrl) {
+  try {
+    normalizedSupabaseUrl = new URL(supabaseUrl).toString().replace(/\/$/, '');
+  } catch {
+    configError = 'SUPABASE_URL is invalid. Use your project URL, e.g. https://<project-ref>.supabase.co';
+  }
+}
+
+const isConfigured = Boolean(normalizedSupabaseUrl && supabaseAnonKey);
+if (!supabaseAnonKey && supabaseUrl) {
+  configError = 'SUPABASE_ANON_KEY is missing on the server.';
+}
 
 let jwks = null;
-if (supabaseUrl) {
-  const jwksUrl = new URL('/auth/v1/.well-known/jwks.json', supabaseUrl);
+if (normalizedSupabaseUrl) {
+  const jwksUrl = new URL('/auth/v1/.well-known/jwks.json', normalizedSupabaseUrl);
   jwks = createRemoteJWKSet(jwksUrl);
 }
 
 function getClientConfig() {
   if (!isConfigured) return null;
   return {
-    url: supabaseUrl,
+    url: normalizedSupabaseUrl,
     anonKey: supabaseAnonKey,
   };
+}
+
+function getConfigError() {
+  return configError;
 }
 
 function parseBearerToken(headerValue) {
@@ -35,7 +53,7 @@ function hasAuthenticatedAudience(aud) {
 
 async function verifyAccessToken(token) {
   if (!isConfigured) {
-    const err = new Error('Supabase auth is not configured on the server.');
+    const err = new Error(getConfigError() || 'Supabase auth is not configured on the server.');
     err.status = 503;
     throw err;
   }
@@ -46,7 +64,7 @@ async function verifyAccessToken(token) {
     throw err;
   }
 
-  const issuer = `${supabaseUrl.replace(/\/$/, '')}/auth/v1`;
+  const issuer = `${normalizedSupabaseUrl}/auth/v1`;
   const { payload } = await jwtVerify(token, jwks, { issuer });
 
   if (!hasAuthenticatedAudience(payload.aud)) {
@@ -80,5 +98,6 @@ async function requireAuth(req, res, next) {
 
 module.exports = {
   getClientConfig,
+  getConfigError,
   requireAuth,
 };
