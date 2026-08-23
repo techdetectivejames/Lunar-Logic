@@ -1560,6 +1560,7 @@ function initDashboardOnce() {
 
 function enterGuestMode(message = '') {
   currentSession = null;
+  document.body.classList.remove('auth-screen');
   authGateEl.hidden = true;
   authUserControlsEl.hidden = true;
   setDashboardVisibility(true);
@@ -1574,6 +1575,7 @@ function enterGuestMode(message = '') {
 
 async function onSignedIn(session) {
   currentSession = session;
+  document.body.classList.remove('auth-screen');
   authGateEl.hidden = true;
   authUserControlsEl.hidden = false;
   authUserEmailEl.textContent = session?.user?.email || session?.user?.id || 'Signed in';
@@ -1601,6 +1603,7 @@ async function onSignedIn(session) {
 
 function onSignedOut(message = '') {
   currentSession = null;
+  document.body.classList.add('auth-screen');
   if (watchlistSyncTimer) {
     clearTimeout(watchlistSyncTimer);
     watchlistSyncTimer = null;
@@ -1614,6 +1617,10 @@ function onSignedOut(message = '') {
 }
 
 async function initAuth() {
+  authGuestBtnEl.addEventListener('click', () => {
+    enterGuestMode('Guest mode enabled. Sign in anytime to sync your watchlists to Supabase.');
+  });
+
   if (!window.supabase || typeof window.supabase.createClient !== 'function') {
     setAuthStatus('Supabase SDK failed to load.', true);
     onSignedOut('Supabase SDK failed to load.');
@@ -1717,10 +1724,6 @@ async function initAuth() {
       }
     });
 
-    authGuestBtnEl.addEventListener('click', () => {
-      enterGuestMode('Guest mode enabled. Sign in anytime to sync your watchlists to Supabase.');
-    });
-
     authSignOutBtnEl.addEventListener('click', async () => {
       if (!supabaseClient) return;
       await supabaseClient.auth.signOut();
@@ -1750,4 +1753,5 @@ async function initAuth() {
 }
 
 setDashboardVisibility(false);
+document.body.classList.add('auth-screen');
 initAuth();

@@ -21,6 +21,48 @@ body {
   min-height: 100vh;
 }
 
+body.auth-screen {
+  background:
+    radial-gradient(1.5px 1.5px at 10% 20%, rgba(255, 255, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 30% 70%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1.2px 1.2px at 55% 45%, rgba(255, 255, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 80% 15%, rgba(255, 255, 255, 0.7), transparent),
+    linear-gradient(180deg, #0b0e14 0%, #090c12 100%);
+  background-size: 260px 180px, 300px 210px, 320px 220px, 280px 180px, auto;
+  animation: auth-stars-drift-a 120s linear infinite, auth-stars-drift-b 170s linear infinite reverse;
+}
+
+@keyframes auth-stars-drift-a {
+  from { background-position: 0 0, 0 0, 0 0, 0 0, 0 0; }
+  to { background-position: -900px 620px, -720px 480px, -980px 660px, -760px 540px, 0 0; }
+}
+
+@keyframes auth-stars-drift-b {
+  from { filter: brightness(0.95); }
+  to { filter: brightness(1.08); }
+}
+
+body.auth-screen .topbar,
+body.auth-screen .ticker-tape,
+body.auth-screen .tab-nav,
+body.auth-screen .app-footer,
+body.auth-screen .pull-refresh-indicator {
+  display: none !important;
+}
+
+body.auth-screen main {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  max-width: none;
+  padding: 20px;
+}
+
+body.auth-screen .auth-gate {
+  width: 100%;
+  margin: 0;
+}
+
 .topbar {
   position: relative;
   overflow: hidden;
