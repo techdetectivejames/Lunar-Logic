@@ -296,6 +296,10 @@ main { padding: 20px 24px 60px; max-width: 1400px; margin: 0 auto; }
   backdrop-filter: blur(2px);
 }
 
+.auth-gate[hidden] {
+  display: none;
+}
+
 .auth-card {
   position: relative;
   width: min(460px, 100%);

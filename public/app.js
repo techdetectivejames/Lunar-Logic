@@ -1627,20 +1627,20 @@ async function initAuth() {
   });
 
   authGuestBtnEl.addEventListener('click', () => {
-    enterGuestMode('Guest mode enabled. Sign in anytime to sync your watchlists to Supabase.');
+    enterGuestMode('Guest mode enabled. Sign in anytime to sync your watchlists.');
   });
 
   if (!window.supabase || typeof window.supabase.createClient !== 'function') {
-    setAuthStatus('Supabase SDK failed to load.', true);
-    onSignedOut('Supabase SDK failed to load.');
+    setAuthStatus('Login is temporarily unavailable. You can continue as guest.', true);
+    onSignedOut();
     return;
   }
 
   try {
     const configRes = await fetch('/api/auth/config');
-    const configBody = await configRes.json().catch(() => ({}));
+    await configRes.json().catch(() => ({}));
     if (!configRes.ok) {
-      throw new Error(configBody.error || `Auth config request failed (${configRes.status})`);
+      throw new Error('Login service is temporarily unavailable.');
     }
 
     supabaseClient = window.supabase.createClient(configBody.url, configBody.anonKey);
@@ -1758,7 +1758,7 @@ async function initAuth() {
     else enterGuestMode();
   } catch (err) {
     enterGuestMode();
-    setAuthStatus(err.message || 'Auth setup failed.', true);
+    setAuthStatus('Login is temporarily unavailable. You can continue as guest.', true);
   }
 }
 
