@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>fin_app — live dashboard</title>
+<title>Lunar Logic — Live Ticker Dashboard</title>
+<link rel="icon" type="image/png" href="/assets/logo.png" />
+<link rel="shortcut icon" type="image/png" href="/assets/logo.png" />
+<link rel="apple-touch-icon" href="/assets/logo.png" />
 <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -16,6 +19,10 @@
     <div class="brand">
       <img src="/assets/logo.png" alt="Lunar Logic" class="brand-logo" />
     </div>
+    <div class="auth-user-controls" id="auth-user-controls" hidden>
+      <span class="auth-user-email" id="auth-user-email"></span>
+      <button type="button" id="auth-signout-btn">Sign out</button>
+    </div>
   </header>
 
   <div class="ticker-tape" id="ticker-tape" aria-label="Market indices">
@@ -23,6 +30,31 @@
   </div>
 
   <main>
+    <section class="auth-gate" id="auth-gate" hidden>
+      <div class="auth-card">
+        <h2>Sign in to Lunar Logic</h2>
+        <p class="muted">Use your account to access your dashboard.</p>
+        <form id="auth-form" class="auth-form" autocomplete="on">
+          <label for="auth-email">Email</label>
+          <input id="auth-email" type="email" placeholder="you@example.com" required />
+          <label for="auth-password">Password</label>
+          <input id="auth-password" type="password" placeholder="Your password" minlength="6" required />
+          <button type="submit" id="auth-submit-btn">Sign in</button>
+        </form>
+        <form id="auth-reset-form" class="auth-form" hidden>
+          <label for="auth-reset-password">New password</label>
+          <input id="auth-reset-password" type="password" placeholder="New password" minlength="6" required />
+          <button type="submit" id="auth-reset-submit-btn">Update password</button>
+        </form>
+        <div class="auth-actions">
+          <button type="button" id="auth-forgot-btn">Forgot password?</button>
+          <button type="button" id="auth-toggle-mode-btn">Create account instead</button>
+          <button type="button" id="auth-guest-btn">Continue as guest</button>
+        </div>
+        <p id="auth-status" class="auth-status muted"></p>
+      </div>
+    </section>
+
     <nav class="tab-nav" role="tablist" aria-label="Sections">
       <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-tab="stocks">Stocks</button>
       <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="crypto">Crypto</button>
@@ -115,6 +147,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/app.js"></script>
 </body>
 </html>

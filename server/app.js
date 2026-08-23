@@ -6,6 +6,8 @@ const finnhub = require('./finnhub');
 const yfinance = require('./yfinance');
 const { analyzeText } = require('./speculation');
 const houseStockWatcher = require('./houseStockWatcher');
+const { getClientConfig, requireAuth } = require('./auth');
+const supabaseStore = require('./supabaseStore');
 
 const app = express();
 const MAX_BATCH_SYMBOLS = 60;
@@ -29,6 +31,82 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use(express.json());
 
 // --- API routes ---
+
+app.get('/api/auth/config', (req, res) => {
+  const config = getClientConfig();
+  if (!config) return res.status(503).json({ error: 'Supabase auth is not configured on the server.' });
+  res.set('Cache-Control', 'no-store');
+  return res.json(config);
+});
+
+app.get('/api/health', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ ok: true });
+});
+
+const PUBLIC_API_PATHS = new Set([
+  '/auth/config',
+  '/health',
+  '/quote',
+  '/search',
+  '/news',
+  '/dividend',
+  '/candles',
+  '/predictions',
+  '/congress',
+  '/quotes-batch',
+  '/crypto/quote',
+  '/crypto/candles',
+  '/crypto/news',
+]);
+
+app.use('/api', (req, res, next) => {
+  if (PUBLIC_API_PATHS.has(req.path)) return next();
+  return requireAuth(req, res, next);
+});
+
+app.get('/api/me', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ user: req.user });
+});
+
+app.get('/api/profile', async (req, res) => {
+  try {
+    await supabaseStore.ensureUserProfile({ userId: req.user.id, email: req.user.email });
+    const profile = await supabaseStore.getUserProfile(req.user.id);
+    res.set('Cache-Control', 'no-store');
+    res.json({ profile });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message, details: err.details || null, hint: err.hint || null });
+  }
+});
+
+app.get('/api/watchlists', async (req, res) => {
+  try {
+    const watchlists = await supabaseStore.getWatchlists(req.user.id);
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      stocks: watchlists?.stocks || null,
+      crypto: watchlists?.crypto || null,
+      updatedAt: watchlists?.updatedAt || null,
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message, details: err.details || null, hint: err.hint || null });
+  }
+});
+
+app.put('/api/watchlists', async (req, res) => {
+  try {
+    const saved = await supabaseStore.saveWatchlists(req.user.id, {
+      stocks: req.body?.stocks,
+      crypto: req.body?.crypto,
+    });
+    res.set('Cache-Control', 'no-store');
+    res.json(saved);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message, details: err.details || null, hint: err.hint || null });
+  }
+});
 
 app.get('/api/quote', async (req, res) => {
   const symbol = String(req.query.symbol || '').toUpperCase();

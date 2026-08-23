@@ -57,6 +57,69 @@ const tickerTapeTrackEl = document.getElementById('ticker-tape-track');
 const tickerModalOverlayEl = document.getElementById('ticker-modal-overlay');
 const tickerModalBodyEl = document.getElementById('ticker-modal-body');
 const tickerModalCloseEl = document.getElementById('ticker-modal-close');
+const authGateEl = document.getElementById('auth-gate');
+const authFormEl = document.getElementById('auth-form');
+const authEmailEl = document.getElementById('auth-email');
+const authPasswordEl = document.getElementById('auth-password');
+const authSubmitBtnEl = document.getElementById('auth-submit-btn');
+const authToggleModeBtnEl = document.getElementById('auth-toggle-mode-btn');
+const authForgotBtnEl = document.getElementById('auth-forgot-btn');
+const authGuestBtnEl = document.getElementById('auth-guest-btn');
+const authResetFormEl = document.getElementById('auth-reset-form');
+const authResetPasswordEl = document.getElementById('auth-reset-password');
+const authResetSubmitBtnEl = document.getElementById('auth-reset-submit-btn');
+const authStatusEl = document.getElementById('auth-status');
+const authSignOutBtnEl = document.getElementById('auth-signout-btn');
+const authUserControlsEl = document.getElementById('auth-user-controls');
+const authUserEmailEl = document.getElementById('auth-user-email');
+const tabNavEl = document.querySelector('.tab-nav');
+
+let supabaseClient = null;
+let currentSession = null;
+let authMode = 'signin';
+let appStarted = false;
+let appRefreshTimer = null;
+let congressRefreshTimer = null;
+let isRecoveryMode = false;
+let watchlistSyncTimer = null;
+
+function setAuthStatus(message, isError = false) {
+  authStatusEl.textContent = message || '';
+  authStatusEl.classList.toggle('error-text', Boolean(isError));
+}
+
+function setDashboardVisibility(isVisible) {
+  tabNavEl.hidden = !isVisible;
+  tabPanels.forEach((panel) => {
+    panel.hidden = !isVisible || !panel.classList.contains('active');
+  });
+  if (!isVisible) tickerModalOverlayEl.hidden = true;
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  const creating = mode === 'signup';
+  authSubmitBtnEl.textContent = creating ? 'Create account' : 'Sign in';
+  authToggleModeBtnEl.textContent = creating ? 'Already have an account? Sign in' : 'Create account instead';
+  authForgotBtnEl.hidden = creating;
+  if (!isRecoveryMode) {
+    authFormEl.hidden = false;
+    authResetFormEl.hidden = true;
+  }
+  setAuthStatus('');
+}
+
+function setRecoveryMode(enabled) {
+  isRecoveryMode = enabled;
+  authFormEl.hidden = enabled;
+  authResetFormEl.hidden = !enabled;
+  authToggleModeBtnEl.hidden = enabled;
+  authForgotBtnEl.hidden = enabled;
+}
+
+function getAccessToken() {
+  return currentSession?.access_token || null;
+}
 
 function escapeHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, (c) => ({
@@ -99,6 +162,7 @@ function loadWatchlist() {
 
 function saveWatchlist(list) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  queueWatchlistSync();
 }
 
 let watchlist = loadWatchlist();
@@ -116,15 +180,70 @@ function loadCryptoWatchlist() {
 
 function saveCryptoWatchlist(list) {
   localStorage.setItem(CRYPTO_STORAGE_KEY, JSON.stringify(list));
+  queueWatchlistSync();
 }
 
 let cryptoWatchlist = loadCryptoWatchlist();
 
-async function fetchJson(url) {
-  const res = await fetch(url);
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
-  return body;
+async function fetchJson(url, { method = 'GET', body, authRequired = false } = {}) {
+  const token = getAccessToken();
+  if (authRequired && !token) throw new Error('Sign in required');
+
+  const headers = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const responseBody = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(responseBody.error || `Request failed (${res.status})`);
+  return responseBody;
+}
+
+function queueWatchlistSync() {
+  if (!currentSession?.access_token) return;
+  if (watchlistSyncTimer) clearTimeout(watchlistSyncTimer);
+  watchlistSyncTimer = setTimeout(() => {
+    syncWatchlistsToCloud();
+  }, 350);
+}
+
+async function syncWatchlistsToCloud() {
+  try {
+    await fetchJson('/api/watchlists', {
+      method: 'PUT',
+      authRequired: true,
+      body: {
+        stocks: watchlist,
+        crypto: cryptoWatchlist,
+      },
+    });
+  } catch {
+    // Local storage remains the fallback if cloud sync fails.
+  }
+}
+
+async function hydrateWatchlistsFromCloud() {
+  if (!currentSession?.access_token) return;
+  const data = await fetchJson('/api/watchlists', { authRequired: true });
+
+  if (Array.isArray(data.stocks) && data.stocks.length) {
+    watchlist = data.stocks.slice(0, MAX_WATCHLIST_SIZE);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(watchlist));
+  }
+
+  if (Array.isArray(data.crypto) && data.crypto.length) {
+    cryptoWatchlist = data.crypto.slice(0, MAX_WATCHLIST_SIZE);
+    localStorage.setItem(CRYPTO_STORAGE_KEY, JSON.stringify(cryptoWatchlist));
+  }
+
+  // First signed-in session with no cloud data: persist the existing local list.
+  if (!Array.isArray(data.stocks) && !Array.isArray(data.crypto)) {
+    await syncWatchlistsToCloud();
+  }
 }
 
 function fmtMoney(n) {
@@ -1088,6 +1207,12 @@ function startLivePolling() {
   schedulePoll(0);
 }
 
+function stopLivePolling() {
+  if (livePollTimer) clearTimeout(livePollTimer);
+  livePollTimer = null;
+  livePollFailures = 0;
+}
+
 // Back off when polls keep failing (e.g. upstream rate limiting) instead of
 // hammering the batch endpoint every LIVE_POLL_MS regardless.
 let livePollFailures = 0;
@@ -1129,6 +1254,37 @@ function streamSubscribe(symbol, assetType) {
 
 function streamUnsubscribe(symbol, assetType) {
   liveSubs[assetType]?.delete(symbol);
+}
+
+function startBackgroundRefreshLoops() {
+  if (!appRefreshTimer) {
+    appRefreshTimer = setInterval(() => {
+      // Only re-poll cards that have actually loaded once (i.e. were scrolled
+      // into view) - re-fetching every off-screen card on a long watchlist would
+      // undo the lazy-load burst reduction above.
+      loadedSymbols(dashboardEl, watchlist).forEach(loadCard);
+      loadedSymbols(cryptoDashboardEl, cryptoWatchlist).forEach(loadCryptoCard);
+      loadTickerTape();
+    }, REFRESH_MS);
+  }
+
+  if (!congressRefreshTimer) {
+    // Filings trickle in over hours/days, so the congress panel refreshes on its
+    // own slower cadence instead of the 30s price loop.
+    const CONGRESS_REFRESH_MS = 5 * 60_000;
+    congressRefreshTimer = setInterval(loadCongressTrades, CONGRESS_REFRESH_MS);
+  }
+}
+
+function stopBackgroundRefreshLoops() {
+  if (appRefreshTimer) {
+    clearInterval(appRefreshTimer);
+    appRefreshTimer = null;
+  }
+  if (congressRefreshTimer) {
+    clearInterval(congressRefreshTimer);
+    congressRefreshTimer = null;
+  }
 }
 
 function applyLiveQuote(msg) {
@@ -1404,27 +1560,198 @@ if (pullRefreshEl && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
 
 // --- Init ---
 
-renderStarsField();
-renderWatchlistBar();
-renderCongressFilterOptions();
-renderDashboard();
-renderCryptoWatchlistBar();
-renderCryptoDashboard();
-renderTickerTape();
-loadTickerTape();
-loadCongressTrades();
-startLivePolling();
+function initDashboardOnce() {
+  if (appStarted) return;
+  renderStarsField();
+  renderWatchlistBar();
+  renderCongressFilterOptions();
+  renderDashboard();
+  renderCryptoWatchlistBar();
+  renderCryptoDashboard();
+  renderTickerTape();
+  appStarted = true;
+}
 
-setInterval(() => {
-  // Only re-poll cards that have actually loaded once (i.e. were scrolled
-  // into view) - re-fetching every off-screen card on a long watchlist would
-  // undo the lazy-load burst reduction above.
-  loadedSymbols(dashboardEl, watchlist).forEach(loadCard);
-  loadedSymbols(cryptoDashboardEl, cryptoWatchlist).forEach(loadCryptoCard);
+function enterGuestMode(message = '') {
+  currentSession = null;
+  authGateEl.hidden = true;
+  authUserControlsEl.hidden = true;
+  setDashboardVisibility(true);
+  initDashboardOnce();
   loadTickerTape();
-}, REFRESH_MS);
+  loadCongressTrades();
+  startLivePolling();
+  startBackgroundRefreshLoops();
+  setRecoveryMode(false);
+  setAuthStatus(message);
+}
 
-// Filings trickle in over hours/days, so the congress panel refreshes on its
-// own slower cadence instead of the 30s price loop.
-const CONGRESS_REFRESH_MS = 5 * 60_000;
-setInterval(loadCongressTrades, CONGRESS_REFRESH_MS);
+async function onSignedIn(session) {
+  currentSession = session;
+  authGateEl.hidden = true;
+  authUserControlsEl.hidden = false;
+  authUserEmailEl.textContent = session?.user?.email || session?.user?.id || 'Signed in';
+  setDashboardVisibility(true);
+  initDashboardOnce();
+  setRecoveryMode(false);
+
+  try {
+    await fetchJson('/api/profile', { authRequired: true });
+    await hydrateWatchlistsFromCloud();
+    renderWatchlistBar();
+    renderCongressFilterOptions();
+    renderDashboard();
+    renderCryptoWatchlistBar();
+    renderCryptoDashboard();
+  } catch (err) {
+    setAuthStatus(`Signed in, but cloud sync is unavailable: ${err.message}`, true);
+  }
+
+  loadTickerTape();
+  loadCongressTrades();
+  startLivePolling();
+  startBackgroundRefreshLoops();
+}
+
+function onSignedOut(message = '') {
+  currentSession = null;
+  if (watchlistSyncTimer) {
+    clearTimeout(watchlistSyncTimer);
+    watchlistSyncTimer = null;
+  }
+  authGateEl.hidden = false;
+  authUserControlsEl.hidden = true;
+  setDashboardVisibility(false);
+  stopLivePolling();
+  stopBackgroundRefreshLoops();
+  setAuthStatus(message);
+}
+
+async function initAuth() {
+  if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+    setAuthStatus('Supabase SDK failed to load.', true);
+    onSignedOut('Supabase SDK failed to load.');
+    return;
+  }
+
+  try {
+    const configRes = await fetch('/api/auth/config');
+    const configBody = await configRes.json().catch(() => ({}));
+    if (!configRes.ok) {
+      throw new Error(configBody.error || `Auth config request failed (${configRes.status})`);
+    }
+
+    supabaseClient = window.supabase.createClient(configBody.url, configBody.anonKey);
+
+    authFormEl.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setAuthStatus('');
+
+      const email = authEmailEl.value.trim();
+      const password = authPasswordEl.value;
+      if (!email || !password) {
+        setAuthStatus('Email and password are required.', true);
+        return;
+      }
+
+      authSubmitBtnEl.disabled = true;
+      try {
+        if (authMode === 'signup') {
+          const { error } = await supabaseClient.auth.signUp({ email, password });
+          if (error) throw error;
+          setAuthStatus('Account created. Check your email to confirm your account, then sign in.');
+        } else {
+          const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+          if (error) throw error;
+          await onSignedIn(data.session);
+          authPasswordEl.value = '';
+        }
+      } catch (err) {
+        setAuthStatus(err.message || 'Authentication failed.', true);
+      } finally {
+        authSubmitBtnEl.disabled = false;
+      }
+    });
+
+    authResetFormEl.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!supabaseClient) return;
+
+      const password = authResetPasswordEl.value;
+      if (!password || password.length < 6) {
+        setAuthStatus('Password must be at least 6 characters.', true);
+        return;
+      }
+
+      authResetSubmitBtnEl.disabled = true;
+      try {
+        const { error } = await supabaseClient.auth.updateUser({ password });
+        if (error) throw error;
+        setRecoveryMode(false);
+        setAuthMode('signin');
+        authResetPasswordEl.value = '';
+        setAuthStatus('Password updated. You can now sign in.');
+      } catch (err) {
+        setAuthStatus(err.message || 'Failed to update password.', true);
+      } finally {
+        authResetSubmitBtnEl.disabled = false;
+      }
+    });
+
+    authToggleModeBtnEl.addEventListener('click', () => {
+      setAuthMode(authMode === 'signin' ? 'signup' : 'signin');
+    });
+
+    authForgotBtnEl.addEventListener('click', async () => {
+      const email = authEmailEl.value.trim();
+      if (!email) {
+        setAuthStatus('Enter your email, then click Forgot password.', true);
+        return;
+      }
+      try {
+        const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.href,
+        });
+        if (error) throw error;
+        setAuthStatus('Password reset email sent. Open the link and set your new password.');
+      } catch (err) {
+        setAuthStatus(err.message || 'Failed to start password reset.', true);
+      }
+    });
+
+    authGuestBtnEl.addEventListener('click', () => {
+      enterGuestMode('Guest mode enabled. Sign in anytime to sync your watchlists to Supabase.');
+    });
+
+    authSignOutBtnEl.addEventListener('click', async () => {
+      if (!supabaseClient) return;
+      await supabaseClient.auth.signOut();
+      onSignedOut('Signed out.');
+    });
+
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        onSignedOut('Set your new password below.');
+        setRecoveryMode(true);
+        return;
+      }
+
+      if (session?.access_token) await onSignedIn(session);
+      else onSignedOut();
+    });
+
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) throw error;
+
+    if (data.session?.access_token) await onSignedIn(data.session);
+    else onSignedOut('Sign in to sync your profile and watchlists, or continue as guest.');
+
+    setAuthMode('signin');
+  } catch (err) {
+    onSignedOut('Auth setup failed.');
+    setAuthStatus(err.message || 'Auth setup failed.', true);
+  }
+}
+
+setDashboardVisibility(false);
+initAuth();
