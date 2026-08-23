@@ -1638,7 +1638,7 @@ async function initAuth() {
 
   try {
     const configRes = await fetch('/api/auth/config');
-    await configRes.json().catch(() => ({}));
+    const configBody = await configRes.json().catch(() => ({}));
     if (!configRes.ok) {
       throw new Error('Login service is temporarily unavailable.');
     }
