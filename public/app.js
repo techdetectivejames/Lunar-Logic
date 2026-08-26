@@ -268,7 +268,9 @@ function sentimentDotHtml(speculation) {
 
 function affectedTickersHtml(tickers) {
   if (!tickers?.length) return '';
-  const chips = tickers.map((t) => `<span class="affected-ticker-chip">${escapeHtml(t)}</span>`).join('');
+  const chips = tickers
+    .map((t) => `<button type="button" class="ticker-link-btn affected-ticker-chip" data-symbol="${escapeHtml(t)}">${escapeHtml(t)}</button>`)
+    .join('');
   return `
     <div class="affected-tickers">
       <span class="affected-tickers-label">Potentially affects:</span>
@@ -1379,8 +1381,20 @@ function handleNewsItemClick(e) {
   item.classList.toggle('expanded', !details.hidden);
 }
 
+// "Potentially affects" tickers under a news article resolve to whichever tab
+// they're actually tracked in - CRYPTO_NAME_ALIASES doubles as the known-coin list.
+const KNOWN_CRYPTO_TICKERS = new Set(Object.values(CRYPTO_NAME_ALIASES));
+
+function handleAffectedTickerClick(e) {
+  const btn = e.target.closest('.affected-ticker-chip');
+  if (!btn) return;
+  const symbol = btn.dataset.symbol;
+  openTickerDetail(symbol, KNOWN_CRYPTO_TICKERS.has(symbol) ? 'crypto' : 'stock');
+}
+
 [dashboardEl, cryptoDashboardEl, tickerModalBodyEl, newsStocksBodyEl, newsCryptoBodyEl].forEach((el) => {
   el.addEventListener('click', handleNewsItemClick);
+  el.addEventListener('click', handleAffectedTickerClick);
 });
 
 window.addEventListener('resize', () => {

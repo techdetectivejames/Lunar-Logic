@@ -702,6 +702,15 @@ table.congress-table td.ticker-cell { font-weight: 700; letter-spacing: 0.02em; 
   cursor: pointer;
 }
 .ticker-link-btn:hover { opacity: 0.8; }
+.ticker-link-btn.affected-ticker-chip {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+  color: var(--text);
+  font-size: 0.75rem;
+}
+.ticker-link-btn.affected-ticker-chip:hover { opacity: 1; border-color: var(--accent); color: var(--accent); }
 .small { font-size: 0.72rem; }
 .congress-group-row.expandable { cursor: pointer; }
 .congress-group-row.expandable:hover td { background: rgba(255, 255, 255, 0.03); }
