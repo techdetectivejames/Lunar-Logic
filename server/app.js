@@ -287,6 +287,7 @@ app.get('/api/crypto/news', async (req, res) => {
         source: item.source,
         url: item.url,
         datetime: item.datetime,
+        image: item.image,
         speculation: analyzeText(`${item.headline || ''} ${item.summary || ''}`),
       }));
     res.json({ symbol: base || null, items: mapped });

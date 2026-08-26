@@ -258,11 +258,17 @@ function speculationBlock(speculation) {
 }
 
 function newsItemHtml(item) {
+  const image = item.image
+    ? `<img src="${escapeHtml(item.image)}" alt="" class="news-item-img" loading="lazy" onerror="this.remove()" />`
+    : '';
   return `
     <div class="news-item">
-      <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.headline)}</a>
-      <div class="news-meta">${escapeHtml(item.source)} · ${escapeHtml(timeAgo(item.datetime))}</div>
-      ${speculationBlock(item.speculation)}
+      ${image}
+      <div class="news-item-body">
+        <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.headline)}</a>
+        <div class="news-meta">${escapeHtml(item.source)} · ${escapeHtml(timeAgo(item.datetime))}</div>
+        ${speculationBlock(item.speculation)}
+      </div>
     </div>
   `;
 }
@@ -1356,6 +1362,21 @@ tabButtons.forEach((btn) => {
     // canvases drawn while hidden fall back to a default size, so redraw once visible
     document.querySelectorAll(`#tab-${target} .ticker-card`).forEach(redrawChartForCard);
     if (target === 'news' && !newsTabLoaded) loadNewsTab();
+  });
+});
+
+const subtabButtons = document.querySelectorAll('.subtab-btn');
+const subtabPanels = document.querySelectorAll('.subtab-panel');
+subtabButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.subtab;
+    subtabButtons.forEach((b) => {
+      b.classList.toggle('active', b === btn);
+      b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
+    });
+    subtabPanels.forEach((panel) => {
+      panel.hidden = panel.id !== `subtab-${target}`;
+    });
   });
 });
 
