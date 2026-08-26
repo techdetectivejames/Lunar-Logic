@@ -257,6 +257,26 @@ function speculationBlock(speculation) {
   `;
 }
 
+// Maps sentiment -> CSS class for the small bullish/neutral/bearish indicator dot.
+const SENTIMENT_DOT_CLASS = { Bullish: 'green', Bearish: 'red', Neutral: 'yellow' };
+
+function sentimentDotHtml(speculation) {
+  if (!speculation?.sentiment) return '';
+  const cls = SENTIMENT_DOT_CLASS[speculation.sentiment] || 'yellow';
+  return `<span class="sentiment-dot ${cls}" title="${escapeHtml(speculation.sentiment)}" aria-label="${escapeHtml(speculation.sentiment)}"></span>`;
+}
+
+function affectedTickersHtml(tickers) {
+  if (!tickers?.length) return '';
+  const chips = tickers.map((t) => `<span class="affected-ticker-chip">${escapeHtml(t)}</span>`).join('');
+  return `
+    <div class="affected-tickers">
+      <span class="affected-tickers-label">Potentially affects:</span>
+      ${chips}
+    </div>
+  `;
+}
+
 function newsItemHtml(item) {
   const image = item.image
     ? `<img src="${escapeHtml(item.image)}" alt="" class="news-item-img" loading="lazy" onerror="this.remove()" />`
@@ -269,7 +289,10 @@ function newsItemHtml(item) {
       <div class="news-item-summary">
         ${image}
         <div class="news-item-body">
-          <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.headline)}</a>
+          <div class="news-item-title-row">
+            ${sentimentDotHtml(item.speculation)}
+            <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.headline)}</a>
+          </div>
           <div class="news-meta">${escapeHtml(item.source)} · ${escapeHtml(timeAgo(item.datetime))}</div>
         </div>
         <span class="news-item-chevron" aria-hidden="true">▾</span>
@@ -277,6 +300,7 @@ function newsItemHtml(item) {
       <div class="news-item-details" hidden>
         ${summary}
         ${speculationBlock(item.speculation)}
+        ${affectedTickersHtml(item.speculation?.tickers)}
       </div>
     </div>
   `;

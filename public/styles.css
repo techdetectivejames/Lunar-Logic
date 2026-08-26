@@ -504,6 +504,7 @@ body.live-connected .live-dot {
 .news-item-body { min-width: 0; flex: 1; }
 .news-item a { color: var(--text); text-decoration: none; font-weight: 600; }
 .news-item a:hover { text-decoration: underline; }
+.news-item-title-row { display: flex; align-items: center; gap: 8px; }
 .news-meta { color: var(--muted); font-size: 0.72rem; margin-top: 2px; }
 .news-item-chevron {
   color: var(--muted);
@@ -517,6 +518,34 @@ body.live-connected .live-dot {
   border-top: 1px solid var(--border);
 }
 .news-item-summary-text { margin: 0 0 8px; color: var(--text); font-size: 0.82rem; line-height: 1.4; }
+
+.sentiment-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.sentiment-dot.green { background: var(--green); }
+.sentiment-dot.red { background: var(--red); }
+.sentiment-dot.yellow { background: var(--yellow); }
+
+.affected-tickers {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+}
+.affected-tickers-label { color: var(--muted); }
+.affected-ticker-chip {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-weight: 600;
+}
 
 .subtab-nav {
   display: flex;

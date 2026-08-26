@@ -28,6 +28,47 @@ const BEARISH_WORDS = [
   'fraud', 'scandal', 'sued', 'negative', 'pessimis', 'sell-off', 'selloff', 'volatile'
 ];
 
+// Common company/coin names -> ticker, used to spot which symbols a headline
+// likely affects even when it names the company instead of the ticker itself.
+// Not exhaustive - just the names frequent enough in general market/crypto news.
+const NAME_TO_TICKER = {
+  apple: 'AAPL', tesla: 'TSLA', nvidia: 'NVDA', microsoft: 'MSFT', amazon: 'AMZN',
+  alphabet: 'GOOGL', google: 'GOOGL', meta: 'META', facebook: 'META', netflix: 'NFLX',
+  broadcom: 'AVGO', amd: 'AMD', intel: 'INTC', qualcomm: 'QCOM', oracle: 'ORCL',
+  salesforce: 'CRM', adobe: 'ADBE', ibm: 'IBM', cisco: 'CSCO', paypal: 'PYPL',
+  disney: 'DIS', boeing: 'BA', walmart: 'WMT', costco: 'COST', nike: 'NKE',
+  mcdonald: 'MCD', starbucks: 'SBUX', 'coca cola': 'KO', pepsico: 'PEP',
+  jpmorgan: 'JPM', 'goldman sachs': 'GS', 'bank of america': 'BAC', citigroup: 'C',
+  visa: 'V', mastercard: 'MA', exxon: 'XOM', chevron: 'CVX', pfizer: 'PFE',
+  moderna: 'MRNA', 'johnson & johnson': 'JNJ', unitedhealth: 'UNH', berkshire: 'BRK.B',
+  ford: 'F', 'general motors': 'GM', uber: 'UBER', airbnb: 'ABNB', palantir: 'PLTR',
+  spotify: 'SPOT', shopify: 'SHOP', snowflake: 'SNOW', coinbase: 'COIN',
+  bitcoin: 'BTC', ethereum: 'ETH', solana: 'SOL', dogecoin: 'DOGE', cardano: 'ADA',
+  ripple: 'XRP', litecoin: 'LTC', polkadot: 'DOT', chainlink: 'LINK', binance: 'BNB',
+};
+
+const CASHTAG_RE = /\$([A-Z]{1,5})\b/g;
+const EXCHANGE_TICKER_RE = /\b(?:NASDAQ|NYSE|NYSEARCA|OTC|OTCMKTS|CRYPTO)\s*:\s*([A-Z]{1,5})\b/gi;
+
+// Best-effort scan for which tickers a headline/summary likely affects - a
+// local heuristic (cashtags, exchange-qualified mentions, known company/coin
+// names), not a substitute for a real entity-linking service.
+function extractTickers(text) {
+  const raw = text || '';
+  const lower = raw.toLowerCase();
+  const found = new Set();
+
+  for (const match of raw.matchAll(CASHTAG_RE)) found.add(match[1].toUpperCase());
+  for (const match of raw.matchAll(EXCHANGE_TICKER_RE)) found.add(match[1].toUpperCase());
+
+  for (const [name, ticker] of Object.entries(NAME_TO_TICKER)) {
+    const re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (re.test(lower)) found.add(ticker);
+  }
+
+  return [...found];
+}
+
 function analyzeText(text) {
   const lower = (text || '').toLowerCase();
   let bullHits = [];
@@ -54,7 +95,7 @@ function analyzeText(text) {
     note = 'No strong directional language detected - likely informational or mixed signal.';
   }
 
-  return { sentiment, score, note };
+  return { sentiment, score, note, tickers: extractTickers(text) };
 }
 
 module.exports = { analyzeText };
