@@ -43,6 +43,9 @@ const congressRepFilterEl = document.getElementById('congress-rep-filter');
 const congressRefreshBtn = document.getElementById('congress-refresh');
 const congressBodyEl = document.getElementById('congress-body');
 const congressUpdatedEl = document.getElementById('congress-updated');
+const newsStocksBodyEl = document.getElementById('news-stocks-body');
+const newsCryptoBodyEl = document.getElementById('news-crypto-body');
+const newsRefreshBtn = document.getElementById('news-refresh');
 const dividendCalcForm = document.getElementById('dividend-calc-form');
 const dividendCalcSymbolEl = document.getElementById('dividend-calc-symbol');
 const dividendCalcSharesEl = document.getElementById('dividend-calc-shares');
@@ -1073,6 +1076,27 @@ async function loadCongressTrades({ forceRefresh = false } = {}) {
   }
 }
 
+let newsTabLoaded = false;
+
+async function loadNewsTab() {
+  newsTabLoaded = true;
+  newsStocksBodyEl.innerHTML = '<p class="spinner">Loading stock market news…</p>';
+  newsCryptoBodyEl.innerHTML = '<p class="spinner">Loading crypto news…</p>';
+
+  const [stockNews, cryptoNews] = await Promise.all([
+    fetchJson('/api/news/market?limit=20').catch((err) => ({ items: [], error: err.message })),
+    fetchJson('/api/crypto/news?limit=20').catch((err) => ({ items: [], error: err.message })),
+  ]);
+
+  newsStocksBodyEl.innerHTML = stockNews.items?.length
+    ? stockNews.items.map(newsItemHtml).join('')
+    : `<p class="${stockNews.error ? 'error-text' : 'muted'}">${escapeHtml(stockNews.error || 'No recent stock market news found.')}</p>`;
+
+  newsCryptoBodyEl.innerHTML = cryptoNews.items?.length
+    ? cryptoNews.items.map(newsItemHtml).join('')
+    : `<p class="${cryptoNews.error ? 'error-text' : 'muted'}">${escapeHtml(cryptoNews.error || 'No recent crypto news found.')}</p>`;
+}
+
 // --- Live price stream (polling) ---
 // Serverless hosts can't hold a persistent per-client WebSocket, so "live"
 // prices come from polling a batched quote endpoint instead of a pushed feed.
@@ -1234,6 +1258,7 @@ congressFilterEl.addEventListener('change', () => {
   loadCongressTrades();
 });
 congressRefreshBtn.addEventListener('click', () => loadCongressTrades({ forceRefresh: true }));
+newsRefreshBtn.addEventListener('click', () => loadNewsTab());
 congressCustomEl.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
@@ -1330,6 +1355,7 @@ tabButtons.forEach((btn) => {
     });
     // canvases drawn while hidden fall back to a default size, so redraw once visible
     document.querySelectorAll(`#tab-${target} .ticker-card`).forEach(redrawChartForCard);
+    if (target === 'news' && !newsTabLoaded) loadNewsTab();
   });
 });
 
@@ -1338,6 +1364,7 @@ tabButtons.forEach((btn) => {
 function refreshActiveTab() {
   const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
   if (activeTab === 'congress') return loadCongressTrades({ forceRefresh: true });
+  if (activeTab === 'news') return loadNewsTab();
   if (activeTab === 'crypto') return Promise.all(loadedSymbols(cryptoDashboardEl, cryptoWatchlist).map(loadCryptoCard));
   if (activeTab === 'tools') return Promise.resolve();
   return Promise.all([...loadedSymbols(dashboardEl, watchlist).map(loadCard), loadTickerTape()]);
@@ -1428,3 +1455,6 @@ setInterval(() => {
 // own slower cadence instead of the 30s price loop.
 const CONGRESS_REFRESH_MS = 5 * 60_000;
 setInterval(loadCongressTrades, CONGRESS_REFRESH_MS);
+
+// News also refreshes on a slower cadence, and only once the tab has been opened.
+setInterval(() => { if (newsTabLoaded) loadNewsTab(); }, CONGRESS_REFRESH_MS);

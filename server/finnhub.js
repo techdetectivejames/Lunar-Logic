@@ -168,6 +168,10 @@ function getCryptoNews() {
   return finnhubRequest('/news', { category: 'crypto' }, 5 * 60 * 1000);
 }
 
+function getMarketNews() {
+  return finnhubRequest('/news', { category: 'general' }, 5 * 60 * 1000);
+}
+
 module.exports = {
   getQuote,
   getProfile,
@@ -177,4 +181,5 @@ module.exports = {
   getEarningsCalendar,
   getRecommendationTrends,
   getCryptoNews,
+  getMarketNews,
 };

@@ -80,6 +80,7 @@ app.get('/api/search', async (req, res) => {
 app.get('/api/news', async (req, res) => {
   const symbol = String(req.query.symbol || '').toUpperCase();
   const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 30);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 30);
   if (!isValidSymbol(symbol)) return res.status(400).json({ error: 'Invalid symbol' });
 
   const to = new Date();
@@ -90,7 +91,7 @@ app.get('/api/news', async (req, res) => {
     const news = await finnhub.getCompanyNews(symbol, toDateStr(from), toDateStr(to));
     const items = (Array.isArray(news) ? news : [])
       .sort((a, b) => (b.datetime || 0) - (a.datetime || 0))
-      .slice(0, 8)
+      .slice(0, limit)
       .map((item) => {
         const speculation = analyzeText(`${item.headline || ''} ${item.summary || ''}`);
         return {
@@ -105,6 +106,31 @@ app.get('/api/news', async (req, res) => {
         };
       });
     res.json({ symbol, items });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// General (not-per-symbol) stock market news for the dedicated News tab.
+app.get('/api/news/market', async (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
+
+  try {
+    const news = await finnhub.getMarketNews();
+    const items = (Array.isArray(news) ? news : [])
+      .sort((a, b) => (b.datetime || 0) - (a.datetime || 0))
+      .slice(0, limit)
+      .map((item) => ({
+        id: item.id,
+        headline: item.headline,
+        summary: item.summary,
+        source: item.source,
+        url: item.url,
+        datetime: item.datetime,
+        image: item.image,
+        speculation: analyzeText(`${item.headline || ''} ${item.summary || ''}`),
+      }));
+    res.json({ items });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
@@ -240,6 +266,7 @@ app.get('/api/crypto/candles', async (req, res) => {
 
 app.get('/api/crypto/news', async (req, res) => {
   const base = String(req.query.symbol || '').toUpperCase();
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 50);
   if (base && !isValidCryptoSymbol(base)) return res.status(400).json({ error: 'Invalid crypto symbol' });
 
   try {
@@ -252,7 +279,7 @@ app.get('/api/crypto/news', async (req, res) => {
     }
     const mapped = items
       .sort((a, b) => (b.datetime || 0) - (a.datetime || 0))
-      .slice(0, 8)
+      .slice(0, limit)
       .map((item) => ({
         id: item.id,
         headline: item.headline,
