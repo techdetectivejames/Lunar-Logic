@@ -156,7 +156,11 @@ function getQuoteAndProfile(symbol) {
       },
       profile: {
         name: q.longName || q.shortName || symbol,
-        marketCapitalization: typeof q.marketCap === 'number' ? round4(q.marketCap / 1_000_000) : null,
+        // ETFs/ETNs (e.g. AMDY) don't have a "market cap" on Yahoo - marketCap is
+        // null and the comparable figure is netAssets (fund AUM) instead.
+        marketCapitalization: typeof q.marketCap === 'number'
+          ? round4(q.marketCap / 1_000_000)
+          : typeof q.netAssets === 'number' ? round4(q.netAssets / 1_000_000) : null,
         exchange: q.fullExchangeName || q.exchange || null,
       },
       source: 'yfinance',

@@ -39,6 +39,19 @@ app.get('/api/quote', async (req, res) => {
       finnhub.getQuote(symbol),
       finnhub.getProfile(symbol).catch(() => ({})),
     ]);
+    // Finnhub's free-tier profile2 doesn't cover ETFs/ETNs (e.g. AMDY) at
+    // all, returning {} - backfill the missing fields from Yahoo instead of
+    // leaving market cap/name/exchange blank.
+    if (!profile.marketCapitalization || !profile.name) {
+      try {
+        const backup = await yfinance.getQuoteAndProfile(symbol);
+        profile.name = profile.name || backup.profile.name;
+        profile.marketCapitalization = profile.marketCapitalization || backup.profile.marketCapitalization;
+        profile.exchange = profile.exchange || backup.profile.exchange;
+      } catch {
+        // Yahoo also has nothing - leave whatever Finnhub gave us (possibly still empty).
+      }
+    }
     res.json({ symbol, quote, profile, source: 'finnhub' });
   } catch (err) {
     // Finnhub down/rate-limited - fall back to Yahoo Finance rather than
