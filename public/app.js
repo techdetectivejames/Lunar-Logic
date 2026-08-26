@@ -266,14 +266,26 @@ function sentimentDotHtml(speculation) {
   return `<span class="sentiment-dot ${cls}" title="${escapeHtml(speculation.sentiment)}" aria-label="${escapeHtml(speculation.sentiment)}"></span>`;
 }
 
-function affectedTickersHtml(tickers) {
-  if (!tickers?.length) return '';
-  const chips = tickers
-    .map((t) => `<button type="button" class="ticker-link-btn affected-ticker-chip" data-symbol="${escapeHtml(t)}">${escapeHtml(t)}</button>`)
-    .join('');
+function affectedTickersHtml(speculation) {
+  const tickers = speculation?.tickers || [];
+  if (tickers.length) {
+    const chips = tickers
+      .map((t) => `<button type="button" class="ticker-link-btn affected-ticker-chip" data-symbol="${escapeHtml(t)}">${escapeHtml(t)}</button>`)
+      .join('');
+    return `
+      <div class="affected-tickers">
+        <span class="affected-tickers-label">Potentially affects:</span>
+        ${chips}
+      </div>
+    `;
+  }
+
+  const sectors = speculation?.sectors || [];
+  if (!sectors.length) return '';
+  const chips = sectors.map((s) => `<span class="affected-ticker-chip sector-chip">${escapeHtml(s)}</span>`).join('');
   return `
     <div class="affected-tickers">
-      <span class="affected-tickers-label">Potentially affects:</span>
+      <span class="affected-tickers-label">Potentially affects sector:</span>
       ${chips}
     </div>
   `;
@@ -302,7 +314,7 @@ function newsItemHtml(item) {
       <div class="news-item-details" hidden>
         ${summary}
         ${speculationBlock(item.speculation)}
-        ${affectedTickersHtml(item.speculation?.tickers)}
+        ${affectedTickersHtml(item.speculation)}
       </div>
     </div>
   `;
@@ -1386,7 +1398,7 @@ function handleNewsItemClick(e) {
 const KNOWN_CRYPTO_TICKERS = new Set(Object.values(CRYPTO_NAME_ALIASES));
 
 function handleAffectedTickerClick(e) {
-  const btn = e.target.closest('.affected-ticker-chip');
+  const btn = e.target.closest('.ticker-link-btn.affected-ticker-chip');
   if (!btn) return;
   const symbol = btn.dataset.symbol;
   openTickerDetail(symbol, KNOWN_CRYPTO_TICKERS.has(symbol) ? 'crypto' : 'stock');

@@ -69,6 +69,32 @@ function extractTickers(text) {
   return [...found];
 }
 
+// Broader fallback for articles that don't name a specific company/coin -
+// which GICS-style sector(s) the language suggests it's actually about.
+const SECTOR_KEYWORDS = {
+  'Technology': ['software', 'hardware', 'semiconductor', 'chip', 'chipmaker', 'artificial intelligence', ' ai ', 'cloud computing', 'cybersecurity', 'data center'],
+  'Energy': ['oil', 'crude', 'opec', 'drilling', 'pipeline', 'natural gas', 'refinery', 'renewable energy', 'solar', 'wind power'],
+  'Healthcare': ['drug', 'pharma', 'pharmaceutical', 'biotech', 'vaccine', 'fda', 'hospital', 'medical device', 'clinical trial'],
+  'Financials': ['bank', 'banking', 'interest rate', 'federal reserve', 'the fed', 'lending', 'mortgage rate', 'insurer', 'insurance'],
+  'Consumer Discretionary': ['retailer', 'retail sales', 'e-commerce', 'auto sales', 'restaurant chain', 'airline', 'hospitality', 'apparel'],
+  'Consumer Staples': ['grocery', 'beverage', 'packaged food', 'household goods', 'tobacco'],
+  'Industrials': ['manufacturing', 'aerospace', 'defense contractor', 'logistics', 'shipping', 'freight', 'construction'],
+  'Materials': ['mining', 'steel', 'copper', 'chemicals', 'commodities', 'metals'],
+  'Real Estate': ['real estate', 'housing market', 'home prices', 'reit', 'property market'],
+  'Utilities': ['electric utility', 'power grid', 'water utility'],
+  'Communication Services': ['telecom', 'streaming service', 'media company', 'advertising', 'social media platform'],
+  'Crypto / Digital Assets': ['crypto', 'blockchain', 'cryptocurrency', 'bitcoin', 'ethereum', 'defi', 'nft', 'stablecoin', 'altcoin', 'token'],
+};
+
+function extractSectors(text) {
+  const lower = ` ${(text || '').toLowerCase()} `;
+  const found = [];
+  for (const [sector, keywords] of Object.entries(SECTOR_KEYWORDS)) {
+    if (keywords.some((kw) => lower.includes(kw))) found.push(sector);
+  }
+  return found;
+}
+
 function analyzeText(text) {
   const lower = (text || '').toLowerCase();
   let bullHits = [];
@@ -95,7 +121,9 @@ function analyzeText(text) {
     note = 'No strong directional language detected - likely informational or mixed signal.';
   }
 
-  return { sentiment, score, note, tickers: extractTickers(text) };
+  const tickers = extractTickers(text);
+
+  return { sentiment, score, note, tickers, sectors: tickers.length ? [] : extractSectors(text) };
 }
 
 module.exports = { analyzeText };

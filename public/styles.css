@@ -546,6 +546,7 @@ body.live-connected .live-dot {
   padding: 2px 9px;
   font-weight: 600;
 }
+.sector-chip { color: var(--muted); cursor: default; }
 
 .subtab-nav {
   display: flex;
