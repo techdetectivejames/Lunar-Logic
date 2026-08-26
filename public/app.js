@@ -261,12 +261,21 @@ function newsItemHtml(item) {
   const image = item.image
     ? `<img src="${escapeHtml(item.image)}" alt="" class="news-item-img" loading="lazy" onerror="this.remove()" />`
     : '';
+  const summary = item.summary?.trim()
+    ? `<p class="news-item-summary-text">${escapeHtml(item.summary)}</p>`
+    : '<p class="muted">No summary available.</p>';
   return `
-    <div class="news-item">
-      ${image}
-      <div class="news-item-body">
-        <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.headline)}</a>
-        <div class="news-meta">${escapeHtml(item.source)} · ${escapeHtml(timeAgo(item.datetime))}</div>
+    <div class="news-item collapsible">
+      <div class="news-item-summary">
+        ${image}
+        <div class="news-item-body">
+          <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.headline)}</a>
+          <div class="news-meta">${escapeHtml(item.source)} · ${escapeHtml(timeAgo(item.datetime))}</div>
+        </div>
+        <span class="news-item-chevron" aria-hidden="true">▾</span>
+      </div>
+      <div class="news-item-details" hidden>
+        ${summary}
         ${speculationBlock(item.speculation)}
       </div>
     </div>
@@ -1334,6 +1343,21 @@ function handleCardSummaryClick(e) {
 
 dashboardEl.addEventListener('click', handleCardSummaryClick);
 cryptoDashboardEl.addEventListener('click', handleCardSummaryClick);
+
+function handleNewsItemClick(e) {
+  if (e.target.closest('a')) return; // let the headline link navigate normally
+  const summary = e.target.closest('.news-item-summary');
+  if (!summary) return;
+  const item = summary.closest('.news-item.collapsible');
+  const details = item?.querySelector('.news-item-details');
+  if (!details) return;
+  details.hidden = !details.hidden;
+  item.classList.toggle('expanded', !details.hidden);
+}
+
+[dashboardEl, cryptoDashboardEl, tickerModalBodyEl, newsStocksBodyEl, newsCryptoBodyEl].forEach((el) => {
+  el.addEventListener('click', handleNewsItemClick);
+});
 
 window.addEventListener('resize', () => {
   document.querySelectorAll('.ticker-card').forEach(redrawChartForCard);
