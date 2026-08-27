@@ -312,8 +312,12 @@ main { padding: 20px 24px 60px; max-width: 1400px; margin: 0 auto; }
   cursor: pointer;
 }
 .ticker-card .card-lock-toggle:hover { color: var(--text); }
-.ticker-card.locked .card-lock-toggle { color: var(--accent); }
-.ticker-card.locked { border-color: var(--accent); }
+/* color alone doesn't tint emoji glyphs - filter forces the lock icon green when active */
+.ticker-card.locked .card-lock-toggle {
+  color: var(--green);
+  filter: grayscale(1) sepia(1) hue-rotate(70deg) saturate(4);
+}
+.ticker-card.locked { border-color: var(--green); }
 
 /* Expanded details float over cards beneath instead of pushing the whole grid down. */
 .ticker-card.collapsible.expanded { z-index: 5; }
