@@ -29,8 +29,8 @@
     <nav class="tab-nav" role="tablist" aria-label="Sections">
       <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-tab="stocks">Stocks</button>
       <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="crypto">Crypto</button>
-      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="congress">Congressional Trades</button>
       <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="news">News</button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="congress">Congressional Trades</button>
       <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tools">Tools</button>
     </nav>
 
@@ -58,6 +58,27 @@
       <section class="dashboard" id="crypto-dashboard" aria-label="Crypto dashboard"></section>
     </section>
 
+    <section class="tab-panel" id="tab-news" role="tabpanel" hidden>
+      <section class="section-heading">
+        <h2>News</h2>
+        <button type="button" id="news-refresh">Refresh</button>
+      </section>
+      <nav class="subtab-nav" role="tablist" aria-label="News categories">
+        <button type="button" class="subtab-btn active" role="tab" aria-selected="true" data-subtab="news-stocks">Stocks</button>
+        <button type="button" class="subtab-btn" role="tab" aria-selected="false" data-subtab="news-crypto">Crypto</button>
+      </nav>
+      <section class="subtab-panel active" id="subtab-news-stocks" role="tabpanel">
+        <div id="news-stocks-body" class="news-list">
+          <p class="muted">Loading stock market news…</p>
+        </div>
+      </section>
+      <section class="subtab-panel" id="subtab-news-crypto" role="tabpanel" hidden>
+        <div id="news-crypto-body" class="news-list">
+          <p class="muted">Loading crypto news…</p>
+        </div>
+      </section>
+    </section>
+
     <section class="tab-panel" id="tab-congress" role="tabpanel" hidden>
       <section class="congress-section">
         <div class="congress-header">
@@ -76,27 +97,6 @@
         <p id="congress-updated" class="muted small congress-updated"></p>
         <div id="congress-body" class="congress-body">
           <p class="muted">Loading recent congressional trading activity (House + Senate)…</p>
-        </div>
-      </section>
-    </section>
-
-    <section class="tab-panel" id="tab-news" role="tabpanel" hidden>
-      <section class="section-heading">
-        <h2>News</h2>
-        <button type="button" id="news-refresh">Refresh</button>
-      </section>
-      <nav class="subtab-nav" role="tablist" aria-label="News categories">
-        <button type="button" class="subtab-btn active" role="tab" aria-selected="true" data-subtab="news-stocks">Stocks</button>
-        <button type="button" class="subtab-btn" role="tab" aria-selected="false" data-subtab="news-crypto">Crypto</button>
-      </nav>
-      <section class="subtab-panel active" id="subtab-news-stocks" role="tabpanel">
-        <div id="news-stocks-body" class="news-list">
-          <p class="muted">Loading stock market news…</p>
-        </div>
-      </section>
-      <section class="subtab-panel" id="subtab-news-crypto" role="tabpanel" hidden>
-        <div id="news-crypto-body" class="news-list">
-          <p class="muted">Loading crypto news…</p>
         </div>
       </section>
     </section>

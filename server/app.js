@@ -294,7 +294,7 @@ app.get('/api/crypto/news', async (req, res) => {
       }));
     // General (all-crypto) feed only - a specific base symbol was already text-filtered above.
     if (!base) {
-      mapped = mapped.filter((item) => item.speculation.tickers.length || item.speculation.sectors.length);
+      mapped = mapped.filter((item) => item.speculation.tickers.length);
     }
     mapped = mapped.slice(0, limit);
     res.json({ symbol: base || null, items: mapped });

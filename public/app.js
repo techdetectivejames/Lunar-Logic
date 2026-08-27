@@ -1367,8 +1367,17 @@ async function pollLiveQuotes() {
     const { stocks = [], crypto = [] } = await fetchJson(`/api/quotes-batch?${params}`);
     document.body.classList.add('live-connected');
     livePollFailures = 0;
-    stocks.forEach((q) => applyLiveQuote({ ...q, assetType: 'stock' }));
-    crypto.forEach((q) => applyLiveQuote({ ...q, assetType: 'crypto' }));
+    const pendingFlashes = [
+      ...stocks.flatMap((q) => applyLiveQuote({ ...q, assetType: 'stock' })),
+      ...crypto.flatMap((q) => applyLiveQuote({ ...q, assetType: 'crypto' })),
+    ];
+    // One forced reflow for the whole batch instead of one per card - reading
+    // offsetWidth per card was serializing dozens of layout recalcs back to
+    // back on the main thread, which is what was stalling input between polls.
+    if (pendingFlashes.length) {
+      void document.body.offsetWidth;
+      pendingFlashes.forEach(({ priceEl, flashClass }) => priceEl.classList.add(flashClass));
+    }
   } catch {
     document.body.classList.remove('live-connected');
     livePollFailures = Math.min(livePollFailures + 1, 4);
@@ -1391,13 +1400,15 @@ function applyLiveQuote(msg) {
     targets.push(...tickerTapeTrackEl.querySelectorAll(`.tape-item[data-symbol="${CSS.escape(symbol)}"]`));
   }
 
-  targets.filter(Boolean).forEach((el) => updateLivePriceEl(el, price));
+  // Returns any flash-animation restarts the caller still needs to apply after
+  // a single shared forced reflow, instead of each card forcing its own.
+  return targets.filter(Boolean).map((el) => updateLivePriceEl(el, price)).filter(Boolean);
 }
 
 function updateLivePriceEl(el, price) {
   const priceEl = el.querySelector('[data-live="price"]');
   const changeEl = el.querySelector('[data-live="change"]');
-  if (!priceEl) return;
+  if (!priceEl) return null;
 
   const prevPrice = parseFloat(el.dataset.lastPrice || price);
   const prevClose = parseFloat(el.dataset.prevClose || price);
@@ -1415,11 +1426,10 @@ function updateLivePriceEl(el, price) {
 
   // Ticker-tape items skip the flash restart: the forced reflow it requires was
   // stalling the main thread on every trade tick, stuttering the scroll animation.
-  if (el.classList.contains('tape-item')) return;
+  if (el.classList.contains('tape-item')) return null;
 
   priceEl.classList.remove('flash-up', 'flash-down');
-  void priceEl.offsetWidth; // restart animation
-  priceEl.classList.add(price >= prevPrice ? 'flash-up' : 'flash-down');
+  return { priceEl, flashClass: price >= prevPrice ? 'flash-up' : 'flash-down' };
 }
 
 function tapeItemHtml({ symbol, label }) {
