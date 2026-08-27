@@ -298,6 +298,22 @@ main { padding: 20px 24px 60px; max-width: 1400px; margin: 0 auto; }
 }
 .ticker-card.expanded .expand-indicator { transform: rotate(180deg); }
 
+.ticker-card .card-lock-toggle {
+  position: absolute;
+  top: -4px;
+  left: -2px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 2px;
+  cursor: pointer;
+}
+.ticker-card .card-lock-toggle:hover { color: var(--text); }
+.ticker-card.locked .card-lock-toggle { color: var(--accent); }
+.ticker-card.locked { border-color: var(--accent); }
+
 /* Expanded details float over cards beneath instead of pushing the whole grid down. */
 .ticker-card.collapsible.expanded { z-index: 5; }
 .ticker-card.collapsible .ticker-card-details:not([hidden]) {
@@ -407,10 +423,13 @@ body.live-connected .live-dot {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 6px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .chart-header strong { font-size: 0.8rem; }
-.period-buttons { display: flex; gap: 4px; }
-.period-btn {
+.chart-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.period-buttons, .chart-style-buttons { display: flex; gap: 4px; }
+.period-btn, .chart-style-btn {
   background: var(--panel-2);
   border: 1px solid var(--border);
   color: var(--muted);
@@ -419,11 +438,32 @@ body.live-connected .live-dot {
   border-radius: 4px;
   cursor: pointer;
 }
-.period-btn:hover { color: var(--text); }
-.period-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+.period-btn:hover, .chart-style-btn:hover { color: var(--text); }
+.period-btn.active, .chart-style-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+.chart-zoom-reset {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.68rem;
+  padding: 3px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.chart-zoom-reset:hover { color: var(--text); }
+.chart-zoom-reset[hidden] { display: none; }
 
 .chart-canvas-wrap { position: relative; }
-.candle-canvas { width: 100%; height: 140px; display: block; cursor: crosshair; }
+.candle-canvas { width: 100%; height: 160px; display: block; cursor: crosshair; }
+.chart-zoom-selection {
+  position: absolute;
+  top: 0;
+  bottom: 16px;
+  background: rgba(77, 155, 255, 0.15);
+  border-left: 1px solid var(--accent);
+  border-right: 1px solid var(--accent);
+  pointer-events: none;
+}
+.chart-hint { margin-top: 6px; font-size: 0.68rem; }
 .chart-tooltip {
   position: absolute;
   background: var(--bg);

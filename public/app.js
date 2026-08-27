@@ -18,9 +18,19 @@ const CRYPTO_NAME_ALIASES = {
   SOLANA: 'SOL',
 };
 const REFRESH_MS = 30_000;
-const PERIODS = ['5d', '1mo', '3mo', '6mo', '1y'];
+const PERIODS = ['5d', '1mo', '3mo', '6mo', '1y', '2y', '5y'];
 const cardPeriod = new Map(); // `${type}:${symbol}` -> selected chart period
 const lastCandles = new Map(); // `${type}:${symbol}` -> last fetched candles (for resize redraws)
+const zoomRanges = new Map(); // `${type}:${symbol}` -> [startIdx, endIdx) into lastCandles, when zoomed in
+const CHART_STYLE_STORAGE_KEY = 'finapp.chartStyle';
+const CHART_STYLES = [
+  { id: 'candle', label: 'Candle' },
+  { id: 'line', label: 'Line' },
+];
+// Default chart style applies app-wide (not per-card) - changing it on any
+// open card updates every chart currently on screen and future ones too.
+let chartStyle = localStorage.getItem(CHART_STYLE_STORAGE_KEY) || 'candle';
+if (!CHART_STYLES.some((s) => s.id === chartStyle)) chartStyle = 'candle';
 const INDEX_ITEMS = [
   { symbol: 'DIA', label: 'DOW' },
   { symbol: 'SPY', label: 'S&P 500' },
@@ -471,28 +481,58 @@ async function loadDividendPreview() {
 
 dividendCalcLoadBtn.addEventListener('click', loadDividendPreview);
 
-function chartBlockHtml(symbol, type = 'stock') {
-  const period = cardPeriod.get(`${type}:${symbol}`) || '1mo';
-  const buttons = PERIODS.map((p) => `
+function chartBlockHtml(symbol, assetType = 'stock') {
+  const period = cardPeriod.get(`${assetType}:${symbol}`) || '1mo';
+  const periodButtons = PERIODS.map((p) => `
     <button type="button" class="period-btn${p === period ? ' active' : ''}" data-symbol="${escapeHtml(symbol)}" data-period="${p}">${p}</button>
+  `).join('');
+  const styleButtons = CHART_STYLES.map((s) => `
+    <button type="button" class="chart-style-btn${s.id === chartStyle ? ' active' : ''}" data-chart-style="${s.id}">${s.label}</button>
   `).join('');
 
   return `
     <div class="chart-block">
       <div class="chart-header">
         <strong>Price Chart</strong>
-        <div class="period-buttons">${buttons}</div>
+        <div class="chart-controls">
+          <div class="chart-style-buttons">${styleButtons}</div>
+          <div class="period-buttons">${periodButtons}</div>
+          <button type="button" class="chart-zoom-reset" hidden>Reset Zoom</button>
+        </div>
       </div>
       <div class="chart-canvas-wrap">
         <canvas class="candle-canvas" data-symbol="${escapeHtml(symbol)}"></canvas>
+        <div class="chart-zoom-selection" hidden></div>
         <div class="chart-tooltip" hidden></div>
       </div>
+      <p class="muted small chart-hint">Drag on the chart to zoom in for more precise pricing · double-click or Reset Zoom to zoom back out.</p>
     </div>
   `;
 }
 
-function drawCandles(canvas, candles) {
-  const tooltip = canvas.parentElement.querySelector('.chart-tooltip');
+// Shortens a "YYYY-MM-DD" candle date into a compact "M/D" axis tick label.
+function formatAxisDate(dateStr) {
+  const parts = String(dateStr || '').split('-');
+  if (parts.length !== 3) return dateStr || '';
+  return `${parseInt(parts[1], 10)}/${parseInt(parts[2], 10)}`;
+}
+
+function visibleCandles(key) {
+  const full = lastCandles.get(key);
+  if (!full) return full;
+  const range = zoomRanges.get(key);
+  return range ? full.slice(range[0], range[1]) : full;
+}
+
+function updateZoomResetVisibility(canvas, zoomed) {
+  const resetBtn = canvas.closest('.chart-block')?.querySelector('.chart-zoom-reset');
+  if (resetBtn) resetBtn.hidden = !zoomed;
+}
+
+function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
+  const wrap = canvas.parentElement;
+  const tooltip = wrap.querySelector('.chart-tooltip');
+  const selectionEl = wrap.querySelector('.chart-zoom-selection');
   const dpr = window.devicePixelRatio || 1;
   const cssWidth = canvas.clientWidth || 320;
   const cssHeight = canvas.clientHeight || 140;
@@ -509,7 +549,8 @@ function drawCandles(canvas, candles) {
     return;
   }
 
-  const padding = { top: 8, bottom: 8, left: 4, right: 4 };
+  // Extra right/bottom padding makes room for the price and date axis labels.
+  const padding = { top: 8, bottom: 16, left: 4, right: 44 };
   const plotW = cssWidth - padding.left - padding.right;
   const plotH = cssHeight - padding.top - padding.bottom;
 
@@ -524,32 +565,92 @@ function drawCandles(canvas, candles) {
   const bodyWidth = Math.max(2, slot * 0.6);
 
   const yFor = (val) => padding.top + plotH - ((val - min) / range) * plotH;
+  const xFor = (i) => padding.left + i * slot + slot / 2;
 
-  candles.forEach((candle, i) => {
-    const x = padding.left + i * slot + slot / 2;
-    const bullish = candle.c >= candle.o;
-    const color = bullish ? '#2ecc71' : '#e74c3c';
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1;
+  // Price gridlines + axis labels, for precisely reading a value off the chart.
+  const GRID_LINES = 4;
+  ctx.font = '10px sans-serif';
+  for (let i = 0; i <= GRID_LINES; i += 1) {
+    const val = min + (range * i) / GRID_LINES;
+    const y = yFor(val);
+    ctx.strokeStyle = 'rgba(139, 147, 167, 0.15)';
     ctx.beginPath();
-    ctx.moveTo(x, yFor(candle.h));
-    ctx.lineTo(x, yFor(candle.l));
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(cssWidth - padding.right, y);
+    ctx.stroke();
+    ctx.fillStyle = '#8b93a7';
+    ctx.textAlign = 'left';
+    ctx.fillText(`$${fmtMoney(val)}`, cssWidth - padding.right + 4, y + 3);
+  }
+
+  // Date axis ticks, evenly spaced across whatever range is currently shown.
+  const TICKS = Math.min(5, n);
+  ctx.textAlign = 'center';
+  for (let i = 0; i < TICKS; i += 1) {
+    const idx = Math.round((i / Math.max(1, TICKS - 1)) * (n - 1));
+    const candle = candles[idx];
+    if (!candle) continue;
+    ctx.fillText(formatAxisDate(candle.t), xFor(idx), cssHeight - 2);
+  }
+  ctx.textAlign = 'left';
+
+  if (style === 'line') {
+    ctx.strokeStyle = '#4d9bff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    candles.forEach((candle, i) => {
+      const x = xFor(i);
+      const y = yFor(candle.c);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
     ctx.stroke();
 
-    ctx.fillStyle = color;
-    const yOpen = yFor(candle.o);
-    const yClose = yFor(candle.c);
-    const bodyTop = Math.min(yOpen, yClose);
-    const bodyHeight = Math.max(1, Math.abs(yClose - yOpen));
-    ctx.fillRect(x - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight);
-  });
+    ctx.lineTo(xFor(n - 1), padding.top + plotH);
+    ctx.lineTo(xFor(0), padding.top + plotH);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(77, 155, 255, 0.12)';
+    ctx.fill();
+  } else {
+    candles.forEach((candle, i) => {
+      const x = xFor(i);
+      const bullish = candle.c >= candle.o;
+      const color = bullish ? '#2ecc71' : '#e74c3c';
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, yFor(candle.h));
+      ctx.lineTo(x, yFor(candle.l));
+      ctx.stroke();
+
+      ctx.fillStyle = color;
+      const yOpen = yFor(candle.o);
+      const yClose = yFor(candle.c);
+      const bodyTop = Math.min(yOpen, yClose);
+      const bodyHeight = Math.max(1, Math.abs(yClose - yOpen));
+      ctx.fillRect(x - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight);
+    });
+  }
+
+  const indexForX = (x) => Math.min(n - 1, Math.max(0, Math.floor((x - padding.left) / slot)));
+
+  // Drag-select a range on the chart to zoom in on it for a more precise view.
+  let dragStartX = null;
 
   canvas.onmousemove = (e) => {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const idx = Math.min(n - 1, Math.max(0, Math.floor((x - padding.left) / slot)));
-    const candle = candles[idx];
+
+    if (dragStartX != null && selectionEl) {
+      const left = Math.min(dragStartX, x);
+      const width = Math.abs(x - dragStartX);
+      selectionEl.hidden = false;
+      selectionEl.style.left = `${left}px`;
+      selectionEl.style.width = `${width}px`;
+    }
+
+    const candle = candles[indexForX(x)];
     if (!candle || !tooltip) return;
     tooltip.hidden = false;
     tooltip.style.left = `${Math.min(x + 8, cssWidth - 130)}px`;
@@ -560,7 +661,45 @@ function drawCandles(canvas, candles) {
       L ${fmtMoney(candle.l)} · C ${fmtMoney(candle.c)}
     `;
   };
+
+  canvas.onmousedown = (e) => {
+    if (!key || n < 3) return;
+    const rect = canvas.getBoundingClientRect();
+    dragStartX = e.clientX - rect.left;
+  };
+
+  canvas.onmouseup = (e) => {
+    if (dragStartX == null) return;
+    const rect = canvas.getBoundingClientRect();
+    const endX = e.clientX - rect.left;
+    const startX = dragStartX;
+    dragStartX = null;
+    if (selectionEl) selectionEl.hidden = true;
+    if (!key || Math.abs(endX - startX) < 12) return; // too small a drag - treat as a plain click
+
+    const idxA = indexForX(Math.min(startX, endX));
+    const idxB = indexForX(Math.max(startX, endX));
+    if (idxB - idxA < 2) return; // not enough candles selected to be a useful zoom
+
+    // idxA/idxB index into whatever slice is currently shown, so offset by the
+    // existing zoom's start (if any) to keep the range anchored on the full data.
+    const base = zoomRanges.get(key)?.[0] || 0;
+    zoomRanges.set(key, [base + idxA, base + idxB + 1]);
+    const card = canvas.closest('.ticker-card');
+    updateZoomResetVisibility(canvas, true);
+    redrawChartForCard(card);
+  };
+
+  canvas.ondblclick = () => {
+    if (!key || !zoomRanges.has(key)) return;
+    zoomRanges.delete(key);
+    updateZoomResetVisibility(canvas, false);
+    redrawChartForCard(canvas.closest('.ticker-card'));
+  };
+
   canvas.onmouseleave = () => {
+    dragStartX = null;
+    if (selectionEl) selectionEl.hidden = true;
     if (tooltip) tooltip.hidden = true;
   };
 }
@@ -570,15 +709,20 @@ async function loadChartForCard(card) {
   const { symbol, assetType: type = 'stock' } = card.dataset;
   const canvas = card.querySelector('.candle-canvas');
   if (!canvas) return;
+  const key = `${type}:${symbol}`;
 
-  const period = cardPeriod.get(`${type}:${symbol}`) || '1mo';
+  const period = cardPeriod.get(key) || '1mo';
   const apiPath = type === 'crypto' ? '/api/crypto/candles' : '/api/candles';
   try {
     const res = await fetchJson(`${apiPath}?symbol=${encodeURIComponent(symbol)}&period=${period}`);
-    lastCandles.set(`${type}:${symbol}`, res.candles);
-    drawCandles(canvas, res.candles);
+    lastCandles.set(key, res.candles);
+    zoomRanges.delete(key); // fresh data (new period) invalidates any prior zoom
+    updateZoomResetVisibility(canvas, false);
+    drawCandles(canvas, res.candles, { key });
   } catch {
-    drawCandles(canvas, []);
+    lastCandles.delete(key);
+    zoomRanges.delete(key);
+    drawCandles(canvas, [], { key });
   }
 }
 
@@ -586,9 +730,25 @@ function redrawChartForCard(card) {
   if (!card) return;
   const { symbol, assetType: type = 'stock' } = card.dataset;
   const canvas = card.querySelector('.candle-canvas');
-  const cached = lastCandles.get(`${type}:${symbol}`);
-  if (canvas && cached) drawCandles(canvas, cached);
+  const key = `${type}:${symbol}`;
+  const candles = visibleCandles(key);
+  if (canvas && candles) drawCandles(canvas, candles, { key });
 }
+
+function handleChartZoomResetClick(e) {
+  const btn = e.target.closest('.chart-zoom-reset');
+  if (!btn) return;
+  const card = btn.closest('.ticker-card');
+  if (!card) return;
+  const { symbol, assetType: type = 'stock' } = card.dataset;
+  zoomRanges.delete(`${type}:${symbol}`);
+  btn.hidden = true;
+  redrawChartForCard(card);
+}
+
+dashboardEl.addEventListener('click', handleChartZoomResetClick);
+cryptoDashboardEl.addEventListener('click', handleChartZoomResetClick);
+tickerModalBodyEl.addEventListener('click', handleChartZoomResetClick);
 
 function predictionsBlockHtml(predictions) {
   if (!predictions) return '';
@@ -673,6 +833,7 @@ async function fillStockCard(card, symbol, { showNews = true, collapsed = false 
           <div>Market Cap<span>${profile.marketCapitalization ? Math.round(profile.marketCapitalization).toLocaleString() + 'M' : '—'}</span></div>
           <div>Exchange<span>${escapeHtml(profile.exchange || '—')}</span></div>
         </div>
+        ${collapsed ? '<button type="button" class="card-lock-toggle" aria-pressed="false" title="Lock card open">🔓</button>' : ''}
         ${collapsed ? '<span class="expand-indicator" aria-hidden="true">▾</span>' : ''}
       </div>
       <div class="ticker-card-details"${collapsed ? ' hidden' : ''}>
@@ -820,6 +981,7 @@ async function fillCryptoCard(card, symbol, { showNews = true, collapsed = false
           <div>Low<span>${fmtMoney(q.l)}</span></div>
           <div>Prev Close<span>${fmtMoney(q.pc)}</span></div>
         </div>
+        ${collapsed ? '<button type="button" class="card-lock-toggle" aria-pressed="false" title="Lock card open">🔓</button>' : ''}
         ${collapsed ? '<span class="expand-indicator" aria-hidden="true">▾</span>' : ''}
       </div>
       <div class="ticker-card-details"${collapsed ? ' hidden' : ''}>
@@ -1349,10 +1511,49 @@ dashboardEl.addEventListener('click', handlePeriodClick);
 cryptoDashboardEl.addEventListener('click', handlePeriodClick);
 tickerModalBodyEl.addEventListener('click', handlePeriodClick);
 
+function handleChartStyleClick(e) {
+  const btn = e.target.closest('.chart-style-btn');
+  if (!btn) return;
+  const style = btn.dataset.chartStyle;
+  if (style === chartStyle) return;
+  chartStyle = style;
+  localStorage.setItem(CHART_STYLE_STORAGE_KEY, chartStyle);
+  document.querySelectorAll('.chart-style-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.chartStyle === chartStyle);
+  });
+  // This is a global default, not a per-card setting - redraw every chart
+  // currently on screen (not just the one that was clicked) to match.
+  document.querySelectorAll('.candle-canvas').forEach((canvas) => {
+    const container = canvas.closest('.ticker-card');
+    if (container) redrawChartForCard(container);
+  });
+}
+
+dashboardEl.addEventListener('click', handleChartStyleClick);
+cryptoDashboardEl.addEventListener('click', handleChartStyleClick);
+tickerModalBodyEl.addEventListener('click', handleChartStyleClick);
+
+function collapseCard(card) {
+  const details = card.querySelector('.ticker-card-details');
+  if (!details || details.hidden) return;
+  details.hidden = true;
+  card.classList.remove('expanded');
+}
+
 function toggleCardExpand(card) {
   const details = card.querySelector('.ticker-card-details');
   if (!details) return;
   const expanding = details.hidden;
+
+  // Only one unlocked card stays open at a time within a dashboard - locked
+  // cards are exempt so they can stay open alongside a newly opened one.
+  if (expanding) {
+    const container = card.closest('.dashboard') || card.parentElement;
+    container.querySelectorAll('.ticker-card.expanded').forEach((other) => {
+      if (other !== card && !other.classList.contains('locked')) collapseCard(other);
+    });
+  }
+
   details.hidden = !expanding;
   card.classList.toggle('expanded', expanding);
   card.classList.remove('bounce');
@@ -1373,6 +1574,7 @@ function toggleCardExpand(card) {
 }
 
 function handleCardSummaryClick(e) {
+  if (e.target.closest('.card-lock-toggle')) return; // handled by handleCardLockClick
   const summary = e.target.closest('.ticker-card-summary');
   if (!summary) return;
   const card = summary.closest('.ticker-card.collapsible');
@@ -1381,6 +1583,21 @@ function handleCardSummaryClick(e) {
 
 dashboardEl.addEventListener('click', handleCardSummaryClick);
 cryptoDashboardEl.addEventListener('click', handleCardSummaryClick);
+
+function handleCardLockClick(e) {
+  const btn = e.target.closest('.card-lock-toggle');
+  if (!btn) return;
+  e.stopPropagation();
+  const card = btn.closest('.ticker-card');
+  if (!card) return;
+  const locked = card.classList.toggle('locked');
+  btn.setAttribute('aria-pressed', String(locked));
+  btn.title = locked ? 'Unlock card (auto-collapses when another card opens)' : 'Lock card open';
+  btn.textContent = locked ? '🔒' : '🔓';
+}
+
+dashboardEl.addEventListener('click', handleCardLockClick);
+cryptoDashboardEl.addEventListener('click', handleCardLockClick);
 
 function handleNewsItemClick(e) {
   if (e.target.closest('a')) return; // let the headline link navigate normally

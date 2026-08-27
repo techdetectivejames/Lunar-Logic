@@ -78,14 +78,30 @@ function round4(n) {
   return typeof n === 'number' ? Math.round(n * 10000) / 10000 : n;
 }
 
-function classifyFrequency(count) {
-  if (count === 0) return 'No recent dividend';
-  if (count === 1) return 'Annual';
-  if (count === 2) return 'Semi-Annual';
-  if (count >= 3 && count <= 6) return 'Quarterly';
-  if (count >= 10 && count <= 15) return 'Monthly';
-  if (count >= 40) return 'Weekly';
-  return 'Irregular';
+// Classifies cadence from the actual gaps between payment dates rather than
+// raw count-over-a-year - a fund that IPO'd a couple months ago and already
+// pays weekly (e.g. INYY) only has ~10 payments on record, which the old
+// count-based buckets (10-15 => Monthly) misclassified.
+function classifyFrequency(dates) {
+  if (!dates || dates.length === 0) return 'No recent dividend';
+  if (dates.length === 1) return 'Annual';
+
+  const sorted = [...dates].sort((a, b) => a - b);
+  const gapsDays = [];
+  for (let i = 1; i < sorted.length; i += 1) {
+    gapsDays.push((sorted[i] - sorted[i - 1]) / (1000 * 60 * 60 * 24));
+  }
+  const avgGapDays = gapsDays.reduce((sum, g) => sum + g, 0) / gapsDays.length;
+  const variance = gapsDays.reduce((sum, g) => sum + (g - avgGapDays) ** 2, 0) / gapsDays.length;
+  const coefficientOfVariation = Math.sqrt(variance) / avgGapDays;
+  if (coefficientOfVariation > 0.5) return 'Irregular';
+
+  if (avgGapDays <= 10) return 'Weekly';
+  if (avgGapDays <= 20) return 'Bi-Weekly';
+  if (avgGapDays <= 45) return 'Monthly';
+  if (avgGapDays <= 100) return 'Quarterly';
+  if (avgGapDays <= 200) return 'Semi-Annual';
+  return 'Annual';
 }
 
 const dividendCache = new Map();
@@ -126,7 +142,7 @@ function getDividendInfo(symbol) {
       lastDividendValue: lastValue,
       lastDividendDate: lastDate,
       exDividendDate: toDateStr(summary.summaryDetail?.exDividendDate),
-      frequency: classifyFrequency(recent.length),
+      frequency: classifyFrequency(recent.map((d) => new Date(d.date))),
       source: 'yfinance',
     };
   });
@@ -168,7 +184,10 @@ function getQuoteAndProfile(symbol) {
   });
 }
 
-const PERIOD_DAYS = { '5d': 5, '1mo': 30, '3mo': 90, '6mo': 180, '1y': 365 };
+const PERIOD_DAYS = { '5d': 5, '1mo': 30, '3mo': 90, '6mo': 180, '1y': 365, '2y': 730, '5y': 1825 };
+// Daily candles for anything longer than a year would be thousands of bars and
+// unreadable/slow to render, so widen the interval for the extended ranges.
+const PERIOD_INTERVAL = { '2y': '1wk', '5y': '1mo' };
 const candlesCache = new Map();
 const CANDLES_TTL_MS = 5 * 60 * 1000;
 
@@ -178,7 +197,7 @@ function getCandles(symbol, period) {
     const days = PERIOD_DAYS[period] || 30;
     const result = await yahooFinance.chart(symbol, {
       period1: new Date(Date.now() - days * 24 * 60 * 60 * 1000),
-      interval: '1d',
+      interval: PERIOD_INTERVAL[period] || '1d',
     });
 
     const candles = (result.quotes || [])

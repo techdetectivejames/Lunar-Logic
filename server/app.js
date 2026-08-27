@@ -150,7 +150,7 @@ app.get('/api/dividend', async (req, res) => {
   }
 });
 
-const VALID_PERIODS = new Set(['5d', '1mo', '3mo', '6mo', '1y']);
+const VALID_PERIODS = new Set(['5d', '1mo', '3mo', '6mo', '1y', '2y', '5y']);
 
 app.get('/api/candles', async (req, res) => {
   const symbol = String(req.query.symbol || '').toUpperCase();
