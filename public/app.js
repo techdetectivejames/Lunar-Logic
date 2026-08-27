@@ -749,6 +749,53 @@ dashboardEl.addEventListener('click', handleChartZoomResetClick);
 cryptoDashboardEl.addEventListener('click', handleChartZoomResetClick);
 tickerModalBodyEl.addEventListener('click', handleChartZoomResetClick);
 
+// Per-representative buy/sell rollup for a single ticker, shown inline on the
+// stock card. Amounts are midpoints of the disclosed STOCK Act dollar ranges.
+function congressCardBlockHtml(trades) {
+  if (!trades.length) {
+    return `
+      <div class="congress-card-block no-trades">
+        <strong>Congressional Trading</strong>
+        <p class="muted">No disclosed congressional trades in the last year.</p>
+      </div>
+    `;
+  }
+
+  const rows = groupByRepresentative(trades).map((group) => {
+    const first = group.trades[0];
+    const buys = group.trades.filter((t) => tradeAction(t.type).cls === 'buy');
+    const sells = group.trades.filter((t) => tradeAction(t.type).cls === 'sell');
+    const sumMid = (list) => list.reduce((sum, t) => sum + (amountMidValue(t) || 0), 0);
+    const buyTotal = buys.length ? fmtAmountEstimate(sumMid(buys)) : null;
+    const sellTotal = sells.length ? fmtAmountEstimate(sumMid(sells)) : null;
+    const latest = group.trades
+      .map((t) => t.transaction_date)
+      .filter(Boolean)
+      .sort((a, b) => (Date.parse(b) || 0) - (Date.parse(a) || 0))[0];
+
+    return `
+      <li>
+        <div class="congress-card-who">
+          <span class="trader-name">${escapeHtml(group.representative)}</span>
+          <span class="muted small">${partyBadge(first.party)} ${escapeHtml(chamberLabel(first.chamber))} ${escapeHtml(first.district || '—')}</span>
+        </div>
+        <div class="congress-card-amounts">
+          ${buyTotal ? `<span class="amount-buy">${escapeHtml(buyTotal)} bought<span class="muted small"> (${buys.length})</span></span>` : ''}
+          ${sellTotal ? `<span class="amount-sell">${escapeHtml(sellTotal)} sold<span class="muted small"> (${sells.length})</span></span>` : ''}
+        </div>
+        <div class="muted small">${escapeHtml(latest || '—')}${latest ? ` · ${escapeHtml(daysAgo(latest))}` : ''}</div>
+      </li>
+    `;
+  }).join('');
+
+  return `
+    <div class="congress-card-block">
+      <strong>Congressional Trading <span class="muted small">(last 12 months, ${trades.length} filings)</span></strong>
+      <ul class="congress-card-list">${rows}</ul>
+    </div>
+  `;
+}
+
 function predictionsBlockHtml(predictions) {
   if (!predictions) return '';
   const { nextEarnings, recommendation } = predictions;
@@ -859,10 +906,11 @@ async function loadStockCardDetails(card, symbol, { showNews = false } = {}) {
   const details = card.querySelector('.ticker-card-details');
   if (!details) return;
   try {
-    const [newsRes, dividendRes, predictionsRes] = await Promise.all([
+    const [newsRes, dividendRes, predictionsRes, congressRes] = await Promise.all([
       showNews ? fetchJson(`/api/news?symbol=${encodeURIComponent(symbol)}`) : Promise.resolve({ items: [] }),
       fetchJson(`/api/dividend?symbol=${encodeURIComponent(symbol)}`).catch(() => ({ paysDividend: false })),
       fetchJson(`/api/predictions?symbol=${encodeURIComponent(symbol)}`).catch(() => null),
+      fetchJson(`/api/congress?symbol=${encodeURIComponent(symbol)}&days=365`).catch(() => ({ trades: [] })),
     ]);
 
     const newsHtml = newsRes.items?.length
@@ -871,10 +919,12 @@ async function loadStockCardDetails(card, symbol, { showNews = false } = {}) {
 
     const dividendHtml = dividendBlockHtml(dividendRes, parseFloat(card.dataset.lastPrice) || null);
     const predictionsHtml = predictionsBlockHtml(predictionsRes);
+    const congressHtml = congressCardBlockHtml(congressRes.trades || []);
 
     details.innerHTML = `
       ${chartBlockHtml(symbol, 'stock')}
       ${dividendHtml}
+      ${congressHtml}
       ${predictionsHtml}
       ${showNews ? `
       <div class="news-list">
