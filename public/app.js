@@ -925,13 +925,13 @@ async function loadStockCardDetails(card, symbol, { showNews = false, showCongre
     details.innerHTML = `
       ${chartBlockHtml(symbol, 'stock')}
       ${dividendHtml}
-      ${congressHtml}
       ${predictionsHtml}
       ${showNews ? `
       <div class="news-list">
         <strong>Stock News &amp; Speculation</strong>
         ${newsHtml}
       </div>` : ''}
+      ${congressHtml}
     `;
     card.dataset.detailsLoaded = 'true';
     loadChartForCard(card);
