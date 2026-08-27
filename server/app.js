@@ -120,7 +120,6 @@ app.get('/api/news/market', async (req, res) => {
     const news = await finnhub.getMarketNews();
     const items = (Array.isArray(news) ? news : [])
       .sort((a, b) => (b.datetime || 0) - (a.datetime || 0))
-      .slice(0, limit)
       .map((item) => ({
         id: item.id,
         headline: item.headline,
@@ -130,7 +129,10 @@ app.get('/api/news/market', async (req, res) => {
         datetime: item.datetime,
         image: item.image,
         speculation: analyzeText(`${item.headline || ''} ${item.summary || ''}`),
-      }));
+      }))
+      // General feed only - drop headlines that don't tie to a specific ticker or sector.
+      .filter((item) => item.speculation.tickers.length || item.speculation.sectors.length)
+      .slice(0, limit);
     res.json({ items });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -278,9 +280,8 @@ app.get('/api/crypto/news', async (req, res) => {
       items = items.filter((item) =>
         `${item.headline || ''} ${item.summary || ''}`.toLowerCase().includes(needle));
     }
-    const mapped = items
+    let mapped = items
       .sort((a, b) => (b.datetime || 0) - (a.datetime || 0))
-      .slice(0, limit)
       .map((item) => ({
         id: item.id,
         headline: item.headline,
@@ -291,6 +292,11 @@ app.get('/api/crypto/news', async (req, res) => {
         image: item.image,
         speculation: analyzeText(`${item.headline || ''} ${item.summary || ''}`),
       }));
+    // General (all-crypto) feed only - a specific base symbol was already text-filtered above.
+    if (!base) {
+      mapped = mapped.filter((item) => item.speculation.tickers.length || item.speculation.sectors.length);
+    }
+    mapped = mapped.slice(0, limit);
     res.json({ symbol: base || null, items: mapped });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
