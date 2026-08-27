@@ -848,7 +848,7 @@ function cardSkeleton(symbol) {
   `;
 }
 
-async function fillStockCard(card, symbol, { showNews = true, collapsed = false } = {}) {
+async function fillStockCard(card, symbol, { showNews = true, collapsed = false, showCongress = true } = {}) {
   try {
     const quoteRes = await fetchJson(`/api/quote?symbol=${encodeURIComponent(symbol)}`);
 
@@ -891,7 +891,7 @@ async function fillStockCard(card, symbol, { showNews = true, collapsed = false 
     // Dividend/predictions/news/chart are only fetched once the card is actually
     // expanded - fetching them for every collapsed dashboard card upfront was
     // tripping Finnhub/Yahoo's rate limits on a full watchlist load.
-    if (!collapsed) await loadStockCardDetails(card, symbol, { showNews });
+    if (!collapsed) await loadStockCardDetails(card, symbol, { showNews, showCongress });
   } catch (err) {
     card.innerHTML = `
       <div class="ticker-card-head">
@@ -902,7 +902,7 @@ async function fillStockCard(card, symbol, { showNews = true, collapsed = false 
   }
 }
 
-async function loadStockCardDetails(card, symbol, { showNews = false } = {}) {
+async function loadStockCardDetails(card, symbol, { showNews = false, showCongress = true } = {}) {
   const details = card.querySelector('.ticker-card-details');
   if (!details) return;
   try {
@@ -910,7 +910,8 @@ async function loadStockCardDetails(card, symbol, { showNews = false } = {}) {
       showNews ? fetchJson(`/api/news?symbol=${encodeURIComponent(symbol)}`) : Promise.resolve({ items: [] }),
       fetchJson(`/api/dividend?symbol=${encodeURIComponent(symbol)}`).catch(() => ({ paysDividend: false })),
       fetchJson(`/api/predictions?symbol=${encodeURIComponent(symbol)}`).catch(() => null),
-      fetchJson(`/api/congress?symbol=${encodeURIComponent(symbol)}&days=365`).catch(() => ({ trades: [] })),
+      // Already looking at this ticker's trades from the Congressional Trades tab itself - redundant there.
+      showCongress ? fetchJson(`/api/congress?symbol=${encodeURIComponent(symbol)}&days=365`).catch(() => ({ trades: [] })) : Promise.resolve(null),
     ]);
 
     const newsHtml = newsRes.items?.length
@@ -919,7 +920,7 @@ async function loadStockCardDetails(card, symbol, { showNews = false } = {}) {
 
     const dividendHtml = dividendBlockHtml(dividendRes, parseFloat(card.dataset.lastPrice) || null);
     const predictionsHtml = predictionsBlockHtml(predictionsRes);
-    const congressHtml = congressCardBlockHtml(congressRes.trades || []);
+    const congressHtml = congressRes ? congressCardBlockHtml(congressRes.trades || []) : '';
 
     details.innerHTML = `
       ${chartBlockHtml(symbol, 'stock')}
@@ -1083,7 +1084,7 @@ function renderCryptoDashboard() {
 
 // --- Ticker detail modal ---
 
-function openTickerDetail(symbol, assetType) {
+function openTickerDetail(symbol, assetType, { showCongress = true } = {}) {
   tickerModalBodyEl.dataset.symbol = symbol;
   tickerModalBodyEl.dataset.assetType = assetType;
   tickerModalBodyEl.innerHTML = `
@@ -1098,7 +1099,7 @@ function openTickerDetail(symbol, assetType) {
   tickerModalOverlayEl.hidden = false;
   document.body.classList.add('modal-open');
   if (assetType === 'crypto') fillCryptoCard(tickerModalBodyEl, symbol);
-  else fillStockCard(tickerModalBodyEl, symbol);
+  else fillStockCard(tickerModalBodyEl, symbol, { showCongress });
 }
 
 function closeTickerDetail() {
@@ -1122,7 +1123,8 @@ cryptoWatchlistBarEl.addEventListener('click', handleChipSymbolClick);
 congressBodyEl.addEventListener('click', (e) => {
   const tickerBtn = e.target.closest('.ticker-link-btn');
   if (tickerBtn && tickerBtn.dataset.symbol) {
-    openTickerDetail(tickerBtn.dataset.symbol, 'stock');
+    // Already on the Congressional Trades tab - showing this ticker's own trades again would be redundant.
+    openTickerDetail(tickerBtn.dataset.symbol, 'stock', { showCongress: false });
     return;
   }
 
