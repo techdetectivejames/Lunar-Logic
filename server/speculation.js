@@ -95,6 +95,31 @@ function extractSectors(text) {
   return found;
 }
 
+// Fallback for when the text names a company/coin but doesn't use sector-ish
+// language itself (e.g. "Nvidia beats estimates" has no word from SECTOR_KEYWORDS).
+const TICKER_SECTOR = {
+  AAPL: 'Technology', MSFT: 'Technology', NVDA: 'Technology', AMD: 'Technology', INTC: 'Technology',
+  QCOM: 'Technology', ORCL: 'Technology', CRM: 'Technology', ADBE: 'Technology', IBM: 'Technology',
+  CSCO: 'Technology', AVGO: 'Technology', SHOP: 'Technology', SNOW: 'Technology', PLTR: 'Technology',
+  GOOGL: 'Communication Services', META: 'Communication Services', NFLX: 'Communication Services', DIS: 'Communication Services',
+  AMZN: 'Consumer Discretionary', TSLA: 'Consumer Discretionary', NKE: 'Consumer Discretionary', MCD: 'Consumer Discretionary',
+  SBUX: 'Consumer Discretionary', F: 'Consumer Discretionary', GM: 'Consumer Discretionary', UBER: 'Consumer Discretionary',
+  ABNB: 'Consumer Discretionary', BA: 'Industrials',
+  WMT: 'Consumer Staples', COST: 'Consumer Staples', KO: 'Consumer Staples', PEP: 'Consumer Staples',
+  JPM: 'Financials', GS: 'Financials', BAC: 'Financials', C: 'Financials', V: 'Financials', MA: 'Financials',
+  PYPL: 'Financials', 'BRK.B': 'Financials',
+  XOM: 'Energy', CVX: 'Energy',
+  PFE: 'Healthcare', MRNA: 'Healthcare', JNJ: 'Healthcare', UNH: 'Healthcare',
+  BTC: 'Crypto / Digital Assets', ETH: 'Crypto / Digital Assets', SOL: 'Crypto / Digital Assets',
+  DOGE: 'Crypto / Digital Assets', ADA: 'Crypto / Digital Assets', XRP: 'Crypto / Digital Assets',
+  LTC: 'Crypto / Digital Assets', DOT: 'Crypto / Digital Assets', LINK: 'Crypto / Digital Assets',
+  BNB: 'Crypto / Digital Assets', COIN: 'Financials',
+};
+
+function sectorsForTickers(tickers) {
+  return [...new Set(tickers.map((t) => TICKER_SECTOR[t]).filter(Boolean))];
+}
+
 function analyzeText(text) {
   const lower = (text || '').toLowerCase();
   let bullHits = [];
@@ -122,8 +147,10 @@ function analyzeText(text) {
   }
 
   const tickers = extractTickers(text);
+  const sectors = extractSectors(text);
+  const combinedSectors = sectors.length ? sectors : sectorsForTickers(tickers);
 
-  return { sentiment, score, note, tickers, sectors: tickers.length ? [] : extractSectors(text) };
+  return { sentiment, score, note, tickers, sectors: combinedSectors };
 }
 
 module.exports = { analyzeText };

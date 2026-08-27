@@ -278,27 +278,28 @@ function sentimentDotHtml(speculation) {
 
 function affectedTickersHtml(speculation) {
   const tickers = speculation?.tickers || [];
-  if (tickers.length) {
-    const chips = tickers
-      .map((t) => `<button type="button" class="ticker-link-btn affected-ticker-chip" data-symbol="${escapeHtml(t)}">${escapeHtml(t)}</button>`)
-      .join('');
-    return `
+  const sectors = speculation?.sectors || [];
+  if (!tickers.length && !sectors.length) return '';
+
+  const tickerBlock = tickers.length
+    ? `
       <div class="affected-tickers">
         <span class="affected-tickers-label">Potentially affects:</span>
-        ${chips}
+        ${tickers.map((t) => `<button type="button" class="ticker-link-btn affected-ticker-chip" data-symbol="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('')}
       </div>
-    `;
-  }
+    `
+    : '';
 
-  const sectors = speculation?.sectors || [];
-  if (!sectors.length) return '';
-  const chips = sectors.map((s) => `<span class="affected-ticker-chip sector-chip">${escapeHtml(s)}</span>`).join('');
-  return `
-    <div class="affected-tickers">
-      <span class="affected-tickers-label">Potentially affects sector:</span>
-      ${chips}
-    </div>
-  `;
+  const sectorBlock = sectors.length
+    ? `
+      <div class="affected-tickers">
+        <span class="affected-tickers-label">Sector:</span>
+        ${sectors.map((s) => `<span class="affected-ticker-chip sector-chip">${escapeHtml(s)}</span>`).join('')}
+      </div>
+    `
+    : '';
+
+  return `${tickerBlock}${sectorBlock}`;
 }
 
 function newsItemHtml(item) {
@@ -323,8 +324,8 @@ function newsItemHtml(item) {
       </div>
       <div class="news-item-details" hidden>
         ${summary}
-        ${speculationBlock(item.speculation)}
         ${affectedTickersHtml(item.speculation)}
+        ${speculationBlock(item.speculation)}
       </div>
     </div>
   `;
@@ -1634,8 +1635,18 @@ function handleNewsItemClick(e) {
   const item = summary.closest('.news-item.collapsible');
   const details = item?.querySelector('.news-item-details');
   if (!details) return;
-  details.hidden = !details.hidden;
-  item.classList.toggle('expanded', !details.hidden);
+  const opening = details.hidden;
+  if (opening) {
+    // Only one article open at a time within the same news list.
+    item.parentElement?.querySelectorAll(':scope > .news-item.expanded').forEach((other) => {
+      if (other === item) return;
+      other.classList.remove('expanded');
+      const otherDetails = other.querySelector('.news-item-details');
+      if (otherDetails) otherDetails.hidden = true;
+    });
+  }
+  details.hidden = !opening;
+  item.classList.toggle('expanded', opening);
 }
 
 // "Potentially affects" tickers under a news article resolve to whichever tab
