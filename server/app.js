@@ -6,6 +6,7 @@ const finnhub = require('./finnhub');
 const yfinance = require('./yfinance');
 const { analyzeText } = require('./speculation');
 const houseStockWatcher = require('./houseStockWatcher');
+const senateTrades = require('./senateTrades');
 
 const app = express();
 const MAX_BATCH_SYMBOLS = 60;
@@ -316,7 +317,7 @@ app.get('/api/congress', async (req, res) => {
   const forceRefresh = req.query.refresh === '1';
 
   try {
-    const [trades, latestDisclosureDate] = await Promise.all([
+    const [houseTrades, senateTradesList, houseLatest, senateLatest] = await Promise.all([
       houseStockWatcher.getTransactions({
         symbol,
         representative,
@@ -326,8 +327,25 @@ app.get('/api/congress', async (req, res) => {
         dateField,
         forceRefresh,
       }),
+      senateTrades.getTransactions({
+        symbol,
+        representative,
+        fromDate: toDateStr(from),
+        toDate: toDateStr(to),
+        limit,
+        dateField,
+        forceRefresh,
+      }).catch(() => []), // Senate feed is a bonus on top of House data - don't fail the whole request if Bargo's free tier is rate-limited
       houseStockWatcher.getLatestDisclosureDate(),
+      senateTrades.getLatestDisclosureDate().catch(() => null),
     ]);
+
+    let trades = [...houseTrades, ...senateTradesList].sort(
+      (a, b) => (Date.parse(b[dateField]) || 0) - (Date.parse(a[dateField]) || 0)
+    );
+    if (typeof limit === 'number') trades = trades.slice(0, limit);
+
+    const latestDisclosureDate = [houseLatest, senateLatest].filter(Boolean).sort().pop() || null;
     res.set('Cache-Control', 'no-store');
     res.json({ symbol, available: true, trades, latestDisclosureDate });
   } catch (err) {

@@ -12,9 +12,11 @@ A finance dashboard backed by the [Finnhub](https://finnhub.io/) API and [yahoo-
 - **Incoming predictions** — next earnings date/EPS estimate and analyst recommendation consensus.
 - **Stock & crypto news with speculation** — recent headlines, each annotated with a local
   keyword-based Bullish/Bearish/Neutral note (Finnhub's paid news-sentiment endpoint isn't required).
-- **Congressional trades** — filterable by ticker, with representative name, district, owner,
-  transaction type and amount, sourced from the free public
-  [House Stock Watcher](https://housestockwatcher.com/) dataset (no API key required).
+- **Congressional trades** — filterable by ticker, with representative name, chamber, district,
+  owner, transaction type and amount. House data comes from the free public
+  [House Stock Watcher](https://housestockwatcher.com/) dataset; Senate data comes from the free
+  [Bargo Congress Trades API](https://www.bargo.ai/free-apis/congress) (neither requires an API key,
+  though an optional free `BARGO_API_KEY` raises Bargo's rate limit - see `.env.example`).
 
 ## Prerequisites
 

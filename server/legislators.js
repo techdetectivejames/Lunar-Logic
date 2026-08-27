@@ -48,10 +48,13 @@ function partyAbbr(party) {
   return PARTY_ABBR[party] || party[0].toUpperCase();
 }
 
-function latestRepTerm(terms) {
+// Name-based lookup applies to senators too (party doesn't depend on chamber),
+// but only House terms use the numeric "state+district" keying in districtMap
+// - senators are looked up by name only, since Senate seats have no district.
+function latestTerm(terms) {
   let latest = null;
   for (const term of terms || []) {
-    if (term.type !== 'rep') continue;
+    if (term.type !== 'rep' && term.type !== 'sen') continue;
     if (!latest || String(term.start) > String(latest.start)) latest = term;
   }
   return latest;
@@ -59,7 +62,7 @@ function latestRepTerm(terms) {
 
 function indexLegislators(list, nameMap, districtMap) {
   for (const legislator of list || []) {
-    const term = latestRepTerm(legislator.terms);
+    const term = latestTerm(legislator.terms);
     if (!term) continue;
     const party = partyAbbr(term.party);
     if (!party) continue;

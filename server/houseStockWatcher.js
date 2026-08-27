@@ -11,6 +11,25 @@ const REFRESH_MS = 10 * 60 * 1000; // upstream mirror is updated roughly daily, 
 let cache = { data: null, time: 0 };
 let inflight = null;
 
+// The upstream scraper's PDF text extraction occasionally leaves null bytes
+// (and other control characters) embedded mid-string, e.g. asset_description
+// values like "F\u0000\u0000\u0000 S\u0000\u0000...: New S...". Strip them so
+// the UI never renders garbled text.
+function sanitizeText(value) {
+  if (typeof value !== 'string') return value;
+  return value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').replace(/\s{2,}/g, ' ').trim();
+}
+
+function normalize(t) {
+  return {
+    ...t,
+    asset_description: sanitizeText(t.asset_description),
+    representative: sanitizeText(t.representative),
+    owner: sanitizeText(t.owner),
+    chamber: 'house',
+  };
+}
+
 async function fetchAll({ forceRefresh = false } = {}) {
   if (cache.data && !forceRefresh && Date.now() - cache.time < REFRESH_MS) return cache.data;
   if (inflight) return inflight;
@@ -23,7 +42,7 @@ async function fetchAll({ forceRefresh = false } = {}) {
       throw err;
     }
     const data = await res.json();
-    cache = { data: Array.isArray(data) ? data : [], time: Date.now() };
+    cache = { data: Array.isArray(data) ? data.map(normalize) : [], time: Date.now() };
     return cache.data;
   })();
 

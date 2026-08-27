@@ -1111,6 +1111,10 @@ function partyBadge(party) {
   return `<span class="badge party ${escapeHtml(label.toLowerCase())}" title="${escapeHtml(label)}">${escapeHtml(party)}</span>`;
 }
 
+function chamberLabel(chamber) {
+  return chamber === 'senate' ? 'Senate ·' : 'House ·';
+}
+
 function daysAgo(dateStr) {
   const t = Date.parse(dateStr);
   if (Number.isNaN(t)) return '';
@@ -1165,7 +1169,7 @@ function tradeRowCells(t, { byDisclosure, primary, secondary }) {
       <td>${escapeHtml(primary || '—')}<div class="muted small">${escapeHtml(daysAgo(primary))}</div></td>
       <td class="trader-cell">
         <div class="trader-name">${escapeHtml(t.representative || '—')}</div>
-        <div class="muted small">${partyBadge(t.party)} ${escapeHtml(t.district || '—')} · ${escapeHtml(t.owner || 'Self')}</div>
+        <div class="muted small">${partyBadge(t.party)} ${escapeHtml(chamberLabel(t.chamber))} ${escapeHtml(t.district || '—')} · ${escapeHtml(t.owner || 'Self')}</div>
       </td>
       <td><span class="badge ${action.cls}">${escapeHtml(action.label)}</span></td>
       <td class="ticker-cell">${t.ticker ? `<button type="button" class="ticker-link-btn" data-symbol="${escapeHtml(t.ticker)}">${escapeHtml(t.ticker)}</button>` : '—'}</td>
@@ -1210,7 +1214,7 @@ function renderCongressTrades(trades, { sortedBy = 'transaction' } = {}) {
       <td>${escapeHtml(primaryDate || '—')}<div class="muted small">${escapeHtml(daysAgo(primaryDate))}</div></td>
       <td class="trader-cell">
         <div class="trader-name"><span class="expand-caret">▸</span> ${escapeHtml(group.representative)} <span class="muted small">(${group.trades.length} trades)</span></div>
-        <div class="muted small">${partyBadge(first.party)} ${escapeHtml(first.district || '—')} · ${escapeHtml(first.owner || 'Self')}</div>
+        <div class="muted small">${partyBadge(first.party)} ${escapeHtml(chamberLabel(first.chamber))} ${escapeHtml(first.district || '—')} · ${escapeHtml(first.owner || 'Self')}</div>
       </td>
       <td>${buyTrades.length ? `<span class="badge buy">${buyTrades.length} Buy</span>` : ''}${sellTrades.length ? ` <span class="badge sell">${sellTrades.length} Sell</span>` : ''}</td>
       <td class="ticker-cell">${escapeHtml(tickerPreview)}</td>
