@@ -486,16 +486,13 @@ function chartBlockHtml(symbol, assetType = 'stock') {
   const periodButtons = PERIODS.map((p) => `
     <button type="button" class="period-btn${p === period ? ' active' : ''}" data-symbol="${escapeHtml(symbol)}" data-period="${p}">${p}</button>
   `).join('');
-  const styleButtons = CHART_STYLES.map((s) => `
-    <button type="button" class="chart-style-btn${s.id === chartStyle ? ' active' : ''}" data-chart-style="${s.id}">${s.label}</button>
-  `).join('');
+  const currentStyle = CHART_STYLES.find((s) => s.id === chartStyle) || CHART_STYLES[0];
 
   return `
     <div class="chart-block">
       <div class="chart-header">
         <strong>Price Chart</strong>
         <div class="chart-controls">
-          <div class="chart-style-buttons">${styleButtons}</div>
           <div class="period-buttons">${periodButtons}</div>
           <button type="button" class="chart-zoom-reset" hidden>Reset Zoom</button>
         </div>
@@ -506,6 +503,7 @@ function chartBlockHtml(symbol, assetType = 'stock') {
         <div class="chart-tooltip" hidden></div>
       </div>
       <p class="muted small chart-hint">Drag on the chart to zoom in for more precise pricing · double-click or Reset Zoom to zoom back out.</p>
+      <button type="button" class="chart-style-toggle" title="Chart style: ${currentStyle.label} (click to switch)">${currentStyle.label}</button>
     </div>
   `;
 }
@@ -817,7 +815,7 @@ async function fillStockCard(card, symbol, { showNews = true, collapsed = false 
       <div class="ticker-card-summary">
         <div class="ticker-card-head">
           <div>
-            <div class="ticker-symbol">${escapeHtml(symbol)} <span class="live-dot" data-live="badge" title="Live price stream"></span></div>
+            <div class="ticker-symbol">${escapeHtml(symbol)} <span class="live-dot" data-live="badge" title="Live price stream"></span>${collapsed ? ' <button type="button" class="card-lock-toggle" aria-pressed="false" title="Lock card open">🔓</button>' : ''}</div>
             <div class="ticker-name">${escapeHtml(profile.name || '')}</div>
           </div>
           <div style="text-align:right">
@@ -833,7 +831,6 @@ async function fillStockCard(card, symbol, { showNews = true, collapsed = false 
           <div>Market Cap<span>${profile.marketCapitalization ? Math.round(profile.marketCapitalization).toLocaleString() + 'M' : '—'}</span></div>
           <div>Exchange<span>${escapeHtml(profile.exchange || '—')}</span></div>
         </div>
-        ${collapsed ? '<button type="button" class="card-lock-toggle" aria-pressed="false" title="Lock card open">🔓</button>' : ''}
         ${collapsed ? '<span class="expand-indicator" aria-hidden="true">▾</span>' : ''}
       </div>
       <div class="ticker-card-details"${collapsed ? ' hidden' : ''}>
@@ -894,8 +891,14 @@ async function loadStockCardDetails(card, symbol, { showNews = false } = {}) {
 async function loadCard(symbol) {
   const card = dashboardEl.querySelector(`.ticker-card[data-symbol="${CSS.escape(symbol)}"]`);
   if (!card) return;
+  const wasExpanded = card.classList.contains('expanded');
+  const wasLocked = card.classList.contains('locked');
   card.dataset.lazyLoaded = 'true';
   await fillStockCard(card, symbol, { showNews: false, collapsed: true });
+  // fillStockCard rebuilds the card from scratch (fresh quote) - reapply state
+  // that would otherwise be silently wiped by this periodic refresh.
+  if (wasLocked) setCardLocked(card, true);
+  if (wasExpanded) expandCard(card);
 }
 
 // Cards stacked below the fold (especially mobile's single-column layout)
@@ -967,7 +970,7 @@ async function fillCryptoCard(card, symbol, { showNews = true, collapsed = false
       <div class="ticker-card-summary">
         <div class="ticker-card-head">
           <div>
-            <div class="ticker-symbol">${escapeHtml(symbol)} <span class="live-dot" data-live="badge" title="Live price stream"></span></div>
+            <div class="ticker-symbol">${escapeHtml(symbol)} <span class="live-dot" data-live="badge" title="Live price stream"></span>${collapsed ? ' <button type="button" class="card-lock-toggle" aria-pressed="false" title="Lock card open">🔓</button>' : ''}</div>
             <div class="ticker-name">${escapeHtml(symbol)}/USD · Binance</div>
           </div>
           <div style="text-align:right">
@@ -981,7 +984,6 @@ async function fillCryptoCard(card, symbol, { showNews = true, collapsed = false
           <div>Low<span>${fmtMoney(q.l)}</span></div>
           <div>Prev Close<span>${fmtMoney(q.pc)}</span></div>
         </div>
-        ${collapsed ? '<button type="button" class="card-lock-toggle" aria-pressed="false" title="Lock card open">🔓</button>' : ''}
         ${collapsed ? '<span class="expand-indicator" aria-hidden="true">▾</span>' : ''}
       </div>
       <div class="ticker-card-details"${collapsed ? ' hidden' : ''}>
@@ -1010,8 +1012,14 @@ async function fillCryptoCard(card, symbol, { showNews = true, collapsed = false
 async function loadCryptoCard(symbol) {
   const card = cryptoDashboardEl.querySelector(`.ticker-card[data-symbol="${CSS.escape(symbol)}"]`);
   if (!card) return;
+  const wasExpanded = card.classList.contains('expanded');
+  const wasLocked = card.classList.contains('locked');
   card.dataset.lazyLoaded = 'true';
   await fillCryptoCard(card, symbol, { showNews: false, collapsed: true });
+  // fillCryptoCard rebuilds the card from scratch (fresh quote) - reapply state
+  // that would otherwise be silently wiped by this periodic refresh.
+  if (wasLocked) setCardLocked(card, true);
+  if (wasExpanded) expandCard(card);
 }
 
 function renderCryptoDashboard() {
@@ -1512,14 +1520,16 @@ cryptoDashboardEl.addEventListener('click', handlePeriodClick);
 tickerModalBodyEl.addEventListener('click', handlePeriodClick);
 
 function handleChartStyleClick(e) {
-  const btn = e.target.closest('.chart-style-btn');
+  const btn = e.target.closest('.chart-style-toggle');
   if (!btn) return;
-  const style = btn.dataset.chartStyle;
-  if (style === chartStyle) return;
-  chartStyle = style;
+  e.stopPropagation();
+  const idx = CHART_STYLES.findIndex((s) => s.id === chartStyle);
+  chartStyle = CHART_STYLES[(idx + 1) % CHART_STYLES.length].id;
   localStorage.setItem(CHART_STYLE_STORAGE_KEY, chartStyle);
-  document.querySelectorAll('.chart-style-btn').forEach((b) => {
-    b.classList.toggle('active', b.dataset.chartStyle === chartStyle);
+  const label = CHART_STYLES.find((s) => s.id === chartStyle).label;
+  document.querySelectorAll('.chart-style-toggle').forEach((b) => {
+    b.textContent = label;
+    b.title = `Chart style: ${label} (click to switch)`;
   });
   // This is a global default, not a per-card setting - redraw every chart
   // currently on screen (not just the one that was clicked) to match.
@@ -1540,26 +1550,11 @@ function collapseCard(card) {
   card.classList.remove('expanded');
 }
 
-function toggleCardExpand(card) {
+function expandCard(card) {
   const details = card.querySelector('.ticker-card-details');
-  if (!details) return;
-  const expanding = details.hidden;
-
-  // Only one unlocked card stays open at a time within a dashboard - locked
-  // cards are exempt so they can stay open alongside a newly opened one.
-  if (expanding) {
-    const container = card.closest('.dashboard') || card.parentElement;
-    container.querySelectorAll('.ticker-card.expanded').forEach((other) => {
-      if (other !== card && !other.classList.contains('locked')) collapseCard(other);
-    });
-  }
-
-  details.hidden = !expanding;
-  card.classList.toggle('expanded', expanding);
-  card.classList.remove('bounce');
-  void card.offsetWidth; // restart animation
-  card.classList.add('bounce');
-  if (!expanding) return;
+  if (!details || !details.hidden) return;
+  details.hidden = false;
+  card.classList.add('expanded');
 
   const { symbol, assetType = 'stock' } = card.dataset;
   // Stock cards defer dividend/predictions/news/chart until first expand
@@ -1571,6 +1566,38 @@ function toggleCardExpand(card) {
   // chart canvas has zero size while [hidden], so it needs a redraw once visible
   if (lastCandles.has(`${assetType}:${symbol}`)) redrawChartForCard(card);
   else loadChartForCard(card);
+}
+
+function setCardLocked(card, locked) {
+  card.classList.toggle('locked', locked);
+  const btn = card.querySelector('.card-lock-toggle');
+  if (!btn) return;
+  btn.setAttribute('aria-pressed', String(locked));
+  btn.title = locked ? 'Unlock card (auto-collapses when another card opens)' : 'Lock card open';
+  btn.textContent = locked ? '🔒' : '🔓';
+}
+
+function toggleCardExpand(card) {
+  const details = card.querySelector('.ticker-card-details');
+  if (!details) return;
+  const expanding = details.hidden;
+
+  card.classList.remove('bounce');
+  void card.offsetWidth; // restart animation
+  card.classList.add('bounce');
+
+  if (!expanding) {
+    collapseCard(card);
+    return;
+  }
+
+  // Only one unlocked card stays open at a time within a dashboard - locked
+  // cards are exempt so they can stay open alongside a newly opened one.
+  const container = card.closest('.dashboard') || card.parentElement;
+  container.querySelectorAll('.ticker-card.expanded').forEach((other) => {
+    if (other !== card && !other.classList.contains('locked')) collapseCard(other);
+  });
+  expandCard(card);
 }
 
 function handleCardSummaryClick(e) {
@@ -1590,10 +1617,7 @@ function handleCardLockClick(e) {
   e.stopPropagation();
   const card = btn.closest('.ticker-card');
   if (!card) return;
-  const locked = card.classList.toggle('locked');
-  btn.setAttribute('aria-pressed', String(locked));
-  btn.title = locked ? 'Unlock card (auto-collapses when another card opens)' : 'Lock card open';
-  btn.textContent = locked ? '🔒' : '🔓';
+  setCardLocked(card, !card.classList.contains('locked'));
 }
 
 dashboardEl.addEventListener('click', handleCardLockClick);
