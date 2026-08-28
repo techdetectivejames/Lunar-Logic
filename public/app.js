@@ -65,11 +65,13 @@ const dividendCalcLoadBtn = document.getElementById('dividend-calc-load');
 const dividendCalcPreviewEl = document.getElementById('dividend-calc-preview');
 const dividendRocForm = document.getElementById('dividend-roc-form');
 const dividendRocSymbolsEl = document.getElementById('dividend-roc-symbols');
-const dividendRocYearsEl = document.getElementById('dividend-roc-years');
 const dividendRocStatusEl = document.getElementById('dividend-roc-status');
 const dividendRocChartBlockEl = document.getElementById('dividend-roc-chart-block');
 const dividendRocCanvas = document.getElementById('dividend-roc-canvas');
 const dividendRocLegendEl = document.getElementById('dividend-roc-legend');
+const dividendRocZoomResetEl = document.getElementById('dividend-roc-zoom-reset');
+const dividendRocZoomSelectionEl = document.getElementById('dividend-roc-zoom-selection');
+const dividendRocPeriodButtonsEl = document.getElementById('dividend-roc-period-buttons');
 const tabButtons = document.querySelectorAll('.tab-btn');
 const tabPanels = document.querySelectorAll('.tab-panel');
 const pullRefreshEl = document.getElementById('pull-refresh-indicator');
@@ -494,6 +496,7 @@ dividendCalcLoadBtn.addEventListener('click', loadDividendPreview);
 const ROC_LINE_COLORS = ['#4d9bff', '#2ecc71', '#e74c3c', '#f1c40f', '#9b59b6', '#1abc9c', '#ff8a65', '#ec7fa9'];
 const MAX_ROC_TICKERS = 8;
 let lastRocSeries = null; // redrawn on resize / tab reveal since a hidden canvas has zero size
+let rocZoomRange = null; // [startMs, endMs] drag-zoomed date range, or null for the full history
 
 // Turns a sorted [{date, amount}] payment history into % change vs. the
 // previous payment (there's no "previous" for the first entry, so it's dropped).
@@ -512,9 +515,14 @@ function computeDividendRocSeries(history) {
   return points;
 }
 
+function updateRocZoomResetVisibility(zoomed) {
+  if (dividendRocZoomResetEl) dividendRocZoomResetEl.hidden = !zoomed;
+}
+
 function drawDividendRocChart(canvas, series) {
   const wrap = canvas.parentElement;
   const tooltip = wrap.querySelector('.chart-tooltip');
+  const selectionEl = wrap.querySelector('.chart-zoom-selection');
   const dpr = window.devicePixelRatio || 1;
   const cssWidth = canvas.clientWidth || 320;
   const cssHeight = canvas.clientHeight || 160;
@@ -524,11 +532,23 @@ function drawDividendRocChart(canvas, series) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-  const allPoints = series.flatMap((s) => s.points);
+  // Dates within the current zoom range (if any), scoped per series so each
+  // line's own scale reflects only what's currently visible.
+  const plotted = rocZoomRange
+    ? series.map((s) => ({
+      ...s,
+      points: s.points.filter((p) => {
+        const t = new Date(p.date).getTime();
+        return t >= rocZoomRange[0] && t <= rocZoomRange[1];
+      }),
+    }))
+    : series;
+
+  const allPoints = plotted.flatMap((s) => s.points);
   if (!allPoints.length) {
     ctx.fillStyle = '#8b93a7';
     ctx.font = '12px sans-serif';
-    ctx.fillText('No dividend history available for these tickers.', 8, cssHeight / 2);
+    ctx.fillText('No dividend history in this range.', 8, cssHeight / 2);
     return;
   }
 
@@ -581,7 +601,7 @@ function drawDividendRocChart(canvas, series) {
   }
   ctx.textAlign = 'left';
 
-  series.forEach((s) => {
+  plotted.forEach((s) => {
     if (!s.points.length) return;
     ctx.strokeStyle = s.color;
     ctx.lineWidth = 1.5;
@@ -599,14 +619,27 @@ function drawDividendRocChart(canvas, series) {
   // hover circles can be redrawn without leaving trails behind on the canvas.
   const baseSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
+  // Drag-select a date range on the chart to zoom in on it, same interaction
+  // as the per-card price charts.
+  let dragStartX = null;
+
   canvas.onmousemove = (e) => {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+
+    if (dragStartX != null && selectionEl) {
+      const left = Math.min(dragStartX, x);
+      const width = Math.abs(x - dragStartX);
+      selectionEl.hidden = false;
+      selectionEl.style.left = `${left}px`;
+      selectionEl.style.width = `${width}px`;
+    }
+
     const t = minT + ((x - padding.left) / plotW) * timeRange;
 
     const hits = [];
-    series.forEach((s) => {
+    plotted.forEach((s) => {
       if (!s.points.length) return;
       let closest = s.points[0];
       let closestDiff = Math.abs(new Date(closest.date).getTime() - t);
@@ -644,25 +677,51 @@ function drawDividendRocChart(canvas, series) {
     tooltip.style.top = `${Math.min(y + 12, cssHeight - tooltip.offsetHeight - 4)}px`;
   };
 
+  canvas.onmousedown = (e) => {
+    if (allPoints.length < 3) return;
+    const rect = canvas.getBoundingClientRect();
+    dragStartX = e.clientX - rect.left;
+  };
+
+  canvas.onmouseup = (e) => {
+    if (dragStartX == null) return;
+    const rect = canvas.getBoundingClientRect();
+    const endX = e.clientX - rect.left;
+    const startX = dragStartX;
+    dragStartX = null;
+    if (selectionEl) selectionEl.hidden = true;
+    if (Math.abs(endX - startX) < 12) return; // too small a drag - treat as a plain click
+
+    const tA = minT + ((Math.min(startX, endX) - padding.left) / plotW) * timeRange;
+    const tB = minT + ((Math.max(startX, endX) - padding.left) / plotW) * timeRange;
+    if (tB - tA < 24 * 60 * 60 * 1000) return; // less than a day selected - not a useful zoom
+
+    rocZoomRange = [tA, tB];
+    updateRocZoomResetVisibility(true);
+    drawDividendRocChart(canvas, series);
+  };
+
+  canvas.ondblclick = () => {
+    if (!rocZoomRange) return;
+    rocZoomRange = null;
+    updateRocZoomResetVisibility(false);
+    drawDividendRocChart(canvas, series);
+  };
+
   canvas.onmouseleave = () => {
+    dragStartX = null;
+    if (selectionEl) selectionEl.hidden = true;
     ctx.putImageData(baseSnapshot, 0, 0);
     if (tooltip) tooltip.hidden = true;
   };
 }
 
-async function plotDividendRoc(e) {
-  e.preventDefault();
-  const symbols = [...new Set(
-    dividendRocSymbolsEl.value.split(/[,\s]+/).map((s) => s.trim().toUpperCase()).filter(Boolean)
-  )].slice(0, MAX_ROC_TICKERS);
+let lastRocSymbols = []; // re-used when switching the lookback period buttons
+let rocYears = 5;
 
-  if (!symbols.length) {
-    dividendRocStatusEl.textContent = 'Enter at least one ticker.';
-    dividendRocChartBlockEl.hidden = true;
-    return;
-  }
-
-  const years = parseInt(dividendRocYearsEl.value, 10) || 5;
+async function loadDividendRoc(symbols, years) {
+  lastRocSymbols = symbols;
+  rocYears = years;
   dividendRocStatusEl.textContent = 'Loading dividend history…';
   dividendRocChartBlockEl.hidden = true;
 
@@ -701,10 +760,42 @@ async function plotDividendRoc(e) {
 
   dividendRocChartBlockEl.hidden = false;
   lastRocSeries = usable;
+  rocZoomRange = null;
+  updateRocZoomResetVisibility(false);
   drawDividendRocChart(dividendRocCanvas, usable);
 }
 
+async function plotDividendRoc(e) {
+  e.preventDefault();
+  const symbols = [...new Set(
+    dividendRocSymbolsEl.value.split(/[,\s]+/).map((s) => s.trim().toUpperCase()).filter(Boolean)
+  )].slice(0, MAX_ROC_TICKERS);
+
+  if (!symbols.length) {
+    dividendRocStatusEl.textContent = 'Enter at least one ticker.';
+    dividendRocChartBlockEl.hidden = true;
+    return;
+  }
+
+  await loadDividendRoc(symbols, rocYears);
+}
+
 dividendRocForm.addEventListener('submit', plotDividendRoc);
+
+dividendRocPeriodButtonsEl?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.period-btn');
+  const years = parseInt(btn?.dataset.years, 10);
+  if (!years || !lastRocSymbols.length) return;
+  dividendRocPeriodButtonsEl.querySelectorAll('.period-btn').forEach((b) => b.classList.toggle('active', b === btn));
+  loadDividendRoc(lastRocSymbols, years);
+});
+
+dividendRocZoomResetEl?.addEventListener('click', () => {
+  if (!lastRocSeries) return;
+  rocZoomRange = null;
+  updateRocZoomResetVisibility(false);
+  drawDividendRocChart(dividendRocCanvas, lastRocSeries);
+});
 
 function chartBlockHtml(symbol, assetType = 'stock') {
   const period = cardPeriod.get(`${assetType}:${symbol}`) || '1mo';

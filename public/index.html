@@ -135,26 +135,28 @@
             <label for="dividend-roc-symbols">Tickers</label>
             <input id="dividend-roc-symbols" type="text" placeholder="e.g. KO, SCHD, JEPI" maxlength="120" required />
           </div>
-          <div>
-            <label for="dividend-roc-years">Lookback</label>
-            <select id="dividend-roc-years">
-              <option value="1">1y</option>
-              <option value="2">2y</option>
-              <option value="5" selected>5y</option>
-              <option value="10">10y</option>
-            </select>
-          </div>
           <button type="submit">Plot</button>
         </form>
         <p id="dividend-roc-status" class="muted small"></p>
         <div class="chart-block dividend-roc-chart-block" id="dividend-roc-chart-block" hidden>
           <div class="chart-header">
             <strong>Dividend ROC</strong>
+            <div class="chart-controls">
+              <div class="period-buttons" id="dividend-roc-period-buttons">
+                <button type="button" class="period-btn" data-years="1">1y</button>
+                <button type="button" class="period-btn" data-years="2">2y</button>
+                <button type="button" class="period-btn active" data-years="5">5y</button>
+                <button type="button" class="period-btn" data-years="10">10y</button>
+              </div>
+              <button type="button" class="chart-zoom-reset" id="dividend-roc-zoom-reset" hidden>Reset Zoom</button>
+            </div>
           </div>
           <div class="chart-canvas-wrap">
             <canvas class="roc-canvas" id="dividend-roc-canvas"></canvas>
+            <div class="chart-zoom-selection" id="dividend-roc-zoom-selection" hidden></div>
             <div class="chart-tooltip" id="dividend-roc-tooltip" hidden></div>
           </div>
+          <p class="muted small chart-hint">Drag on the chart to zoom in on a date range · double-click or Reset Zoom to zoom back out.</p>
           <div class="roc-legend" id="dividend-roc-legend"></div>
         </div>
       </section>
