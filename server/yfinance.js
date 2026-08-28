@@ -96,6 +96,10 @@ function classifyFrequency(dates) {
   const coefficientOfVariation = Math.sqrt(variance) / avgGapDays;
   if (coefficientOfVariation > 0.5) return 'Irregular';
 
+  // Some newer income ETFs (e.g. QLDY, QDTE) pay twice a week (~3.5d avg gap),
+  // which a single <=10d "Weekly" bucket would misclassify as regular Weekly
+  // and understate the true ~104/year payment count by half.
+  if (avgGapDays <= 5) return 'Twice-Weekly';
   if (avgGapDays <= 10) return 'Weekly';
   if (avgGapDays <= 20) return 'Bi-Weekly';
   if (avgGapDays <= 45) return 'Monthly';

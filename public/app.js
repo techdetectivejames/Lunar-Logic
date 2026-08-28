@@ -373,7 +373,7 @@ function dividendBlockHtml(dividend, currentPrice) {
 // --- Dividend calculator ---
 
 const PAYMENTS_PER_YEAR = {
-  Weekly: 52, Monthly: 12, Quarterly: 4, 'Semi-Annual': 2, Annual: 1,
+  'Twice-Weekly': 104, Weekly: 52, Monthly: 12, Quarterly: 4, 'Semi-Annual': 2, Annual: 1,
 };
 
 async function calculateDividend(e) {
