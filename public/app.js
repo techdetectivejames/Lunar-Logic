@@ -628,12 +628,47 @@ function drawDividendRocChart(canvas, series) {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    if (dragStartX != null && selectionEl) {
-      const left = Math.min(dragStartX, x);
-      const width = Math.abs(x - dragStartX);
-      selectionEl.hidden = false;
-      selectionEl.style.left = `${left}px`;
-      selectionEl.style.width = `${width}px`;
+    if (dragStartX != null) {
+      if (selectionEl) {
+        const left = Math.min(dragStartX, x);
+        const width = Math.abs(x - dragStartX);
+        selectionEl.hidden = false;
+        selectionEl.style.left = `${left}px`;
+        selectionEl.style.width = `${width}px`;
+      }
+
+      // While highlighting a range, show the summed payout + elapsed time for
+      // whatever falls inside the drag instead of a single-point readout.
+      if (tooltip) {
+        const tA = minT + ((Math.min(dragStartX, x) - padding.left) / plotW) * timeRange;
+        const tB = minT + ((Math.max(dragStartX, x) - padding.left) / plotW) * timeRange;
+
+        const sums = plotted
+          .map((s) => {
+            const inRange = s.points.filter((p) => {
+              const t = new Date(p.date).getTime();
+              return t >= tA && t <= tB;
+            });
+            if (!inRange.length) return null;
+            const total = inRange.reduce((sum, p) => sum + p.amount, 0);
+            return { symbol: s.symbol, color: s.color, total, count: inRange.length };
+          })
+          .filter(Boolean);
+
+        if (sums.length) {
+          const days = Math.max(0, Math.round((tB - tA) / (24 * 60 * 60 * 1000)));
+          tooltip.innerHTML = `
+            ${sums.map((s) => `<strong style="color:${s.color}">${escapeHtml(s.symbol)}</strong> \u03a3 $${fmtMoney(s.total)}/share (${s.count} payment${s.count === 1 ? '' : 's'})`).join('<br>')}
+            <br><em>${days} day${days === 1 ? '' : 's'} selected</em>
+          `;
+          tooltip.hidden = false;
+          tooltip.style.left = `${Math.min(x + 12, cssWidth - tooltip.offsetWidth - 4)}px`;
+          tooltip.style.top = `${Math.min(y + 12, cssHeight - tooltip.offsetHeight - 4)}px`;
+        } else {
+          tooltip.hidden = true;
+        }
+      }
+      return;
     }
 
     const t = minT + ((x - padding.left) / plotW) * timeRange;
@@ -690,6 +725,7 @@ function drawDividendRocChart(canvas, series) {
     const startX = dragStartX;
     dragStartX = null;
     if (selectionEl) selectionEl.hidden = true;
+    if (tooltip) tooltip.hidden = true; // clear the accumulated-selection readout
     if (Math.abs(endX - startX) < 12) return; // too small a drag - treat as a plain click
 
     const tA = minT + ((Math.min(startX, endX) - padding.left) / plotW) * timeRange;
