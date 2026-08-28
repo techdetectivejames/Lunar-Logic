@@ -503,7 +503,11 @@ function computeDividendRocSeries(history) {
     const prev = history[i - 1];
     const cur = history[i];
     if (!prev.amount) continue;
-    points.push({ date: cur.date, pct: Math.round(((cur.amount - prev.amount) / prev.amount) * 10000) / 100 });
+    points.push({
+      date: cur.date,
+      amount: cur.amount,
+      pct: Math.round(((cur.amount - prev.amount) / prev.amount) * 10000) / 100,
+    });
   }
   return points;
 }
@@ -621,12 +625,13 @@ function drawDividendRocChart(canvas, series) {
     if (!tooltip) return;
     if (!hits.length) { tooltip.hidden = true; return; }
 
-    tooltip.hidden = false;
-    tooltip.style.left = `${Math.min(x + 12, cssWidth - 150)}px`;
-    tooltip.style.top = `${Math.min(y + 12, Math.max(0, cssHeight - 20 * hits.length - 10))}px`;
     tooltip.innerHTML = hits
-      .map((h) => `<strong style="color:${h.color}">${escapeHtml(h.symbol)}</strong> ${fmtPct(h.point.pct)} · ${escapeHtml(h.point.date)}`)
+      .map((h) => `<strong style="color:${h.color}">${escapeHtml(h.symbol)}</strong> $${fmtMoney(h.point.amount)}/share · ${fmtPct(h.point.pct)} · ${escapeHtml(h.point.date)}`)
       .join('<br>');
+    tooltip.hidden = false;
+    // Anchored to the cursor's bottom-right, clamped so it never overflows the chart.
+    tooltip.style.left = `${Math.min(x + 12, cssWidth - tooltip.offsetWidth - 4)}px`;
+    tooltip.style.top = `${Math.min(y + 12, cssHeight - tooltip.offsetHeight - 4)}px`;
   };
 
   canvas.onmouseleave = () => { if (tooltip) tooltip.hidden = true; };
