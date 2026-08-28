@@ -585,6 +585,18 @@ body.live-connected .live-dot {
   border-radius: 6px;
   object-fit: cover;
   flex-shrink: 0;
+  transition: width 0.25s ease, height 0.25s ease;
+}
+.news-item.expanded .news-item-img {
+  width: 112px;
+  height: 112px;
+  animation: news-img-bounce 0.45s ease;
+}
+@keyframes news-img-bounce {
+  0% { transform: scale(0.85); }
+  50% { transform: scale(1.08); }
+  75% { transform: scale(0.97); }
+  100% { transform: scale(1); }
 }
 .news-item-body { min-width: 0; flex: 1; }
 .news-item a { color: var(--text); text-decoration: none; font-weight: 600; }
