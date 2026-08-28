@@ -644,6 +644,7 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
   canvas.onmousemove = (e) => {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
     if (dragStartX != null && selectionEl) {
       const left = Math.min(dragStartX, x);
@@ -671,8 +672,9 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
     }
 
     tooltip.hidden = false;
-    tooltip.style.left = `${Math.min(x + 8, cssWidth - 130)}px`;
-    tooltip.style.top = '4px';
+    // Follows the cursor, offset to its bottom-right, clamped so it stays inside the chart.
+    tooltip.style.left = `${Math.min(x + 12, cssWidth - 130)}px`;
+    tooltip.style.top = `${Math.min(y + 12, cssHeight - 56)}px`;
     tooltip.innerHTML = `
       <strong>${escapeHtml(candle.t)}</strong>
       O ${fmtMoney(candle.o)} · H ${fmtMoney(candle.h)}<br>
