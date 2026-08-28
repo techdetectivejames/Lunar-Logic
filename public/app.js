@@ -593,14 +593,11 @@ function drawDividendRocChart(canvas, series) {
       else ctx.lineTo(x, y);
     });
     ctx.stroke();
-
-    ctx.fillStyle = s.color;
-    s.points.forEach((p) => {
-      ctx.beginPath();
-      ctx.arc(xFor(new Date(p.date).getTime()), yFor(p.pct), 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    });
   });
+
+  // Snapshot of the static lines/grid, repainted each mousemove so the traced
+  // hover circles can be redrawn without leaving trails behind on the canvas.
+  const baseSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
   canvas.onmousemove = (e) => {
     const rect = canvas.getBoundingClientRect();
@@ -622,6 +619,19 @@ function drawDividendRocChart(canvas, series) {
       }
     });
 
+    ctx.putImageData(baseSnapshot, 0, 0);
+    hits.forEach((h) => {
+      const hx = xFor(new Date(h.point.date).getTime());
+      const hy = yFor(h.point.pct);
+      ctx.beginPath();
+      ctx.arc(hx, hy, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = h.color;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+    });
+
     if (!tooltip) return;
     if (!hits.length) { tooltip.hidden = true; return; }
 
@@ -634,7 +644,10 @@ function drawDividendRocChart(canvas, series) {
     tooltip.style.top = `${Math.min(y + 12, cssHeight - tooltip.offsetHeight - 4)}px`;
   };
 
-  canvas.onmouseleave = () => { if (tooltip) tooltip.hidden = true; };
+  canvas.onmouseleave = () => {
+    ctx.putImageData(baseSnapshot, 0, 0);
+    if (tooltip) tooltip.hidden = true;
+  };
 }
 
 async function plotDividendRoc(e) {
