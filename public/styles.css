@@ -193,8 +193,7 @@ body {
   border-radius: 6px;
   min-width: 220px;
 }
-.add-ticker-form button,
-.congress-controls button {
+.add-ticker-form button {
   background: var(--accent);
   border: none;
   color: white;
@@ -203,8 +202,7 @@ body {
   cursor: pointer;
   font-weight: 600;
 }
-.add-ticker-form button:hover,
-.congress-controls button:hover { opacity: 0.9; }
+.add-ticker-form button:hover { opacity: 0.9; }
 
 main { padding: 20px 24px 60px; max-width: 1400px; margin: 0 auto; }
 
@@ -679,53 +677,6 @@ body.live-connected .live-dot {
 .muted { color: var(--muted); }
 .error-text { color: var(--red); font-size: 0.85rem; }
 
-.congress-section {
-  margin-top: 32px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 18px;
-}
-.congress-header {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.congress-controls {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.congress-controls label { font-size: 0.8rem; color: var(--muted); }
-.congress-controls select,
-.congress-controls input {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 7px 10px;
-  border-radius: 6px;
-}
-
-table.congress-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-table.congress-table th,
-table.congress-table td {
-  text-align: left;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
-}
-table.congress-table th { color: var(--muted); font-weight: 600; }
-table.congress-table td.trader-cell { min-width: 160px; }
-table.congress-table .trader-name { font-weight: 700; font-size: 0.95rem; }
-table.congress-table td.ticker-cell { font-weight: 700; letter-spacing: 0.02em; }
-
 .dividend-calc-section {
   margin-top: 32px;
   background: var(--panel);
@@ -865,18 +816,6 @@ table.congress-table td.ticker-cell { font-weight: 700; letter-spacing: 0.02em; 
 }
 .ticker-link-btn.affected-ticker-chip:hover { opacity: 1; border-color: var(--accent); color: var(--accent); }
 .small { font-size: 0.72rem; }
-.congress-group-row.expandable { cursor: pointer; }
-.congress-group-row.expandable:hover td { background: rgba(255, 255, 255, 0.03); }
-.congress-group-row .expand-caret {
-  display: inline-block;
-  transition: transform 0.15s ease;
-}
-.congress-group-row.expanded .expand-caret { transform: rotate(90deg); }
-.congress-detail-row td {
-  background: rgba(255, 255, 255, 0.02);
-  font-size: 0.82rem;
-}
-.congress-detail-row.hidden { display: none; }
 .badge {
   display: inline-block;
   padding: 2px 8px;
@@ -1006,19 +945,6 @@ body.modal-open { overflow: hidden; }
     margin-top: 12px;
     box-shadow: none;
   }
-
-  .congress-section { padding: 14px; }
-  .congress-header { flex-direction: column; align-items: stretch; }
-  .congress-controls { flex-direction: column; align-items: stretch; }
-  .congress-controls select,
-  .congress-controls input,
-  .congress-controls button { width: 100%; }
-
-  .congress-body { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  table.congress-table { font-size: 0.78rem; }
-  table.congress-table th,
-  table.congress-table td { padding: 6px; }
-  table.congress-table td.trader-cell { min-width: 120px; }
 
   .dividend-calc-form { flex-direction: column; align-items: stretch; }
   .dividend-calc-form input { width: 100%; }

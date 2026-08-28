@@ -47,12 +47,6 @@ const cryptoDashboardEl = document.getElementById('crypto-dashboard');
 const cryptoWatchlistBarEl = document.getElementById('crypto-watchlist-bar');
 const addCryptoForm = document.getElementById('add-crypto-form');
 const cryptoInput = document.getElementById('crypto-input');
-const congressFilterEl = document.getElementById('congress-ticker-filter');
-const congressCustomEl = document.getElementById('congress-ticker-custom');
-const congressRepFilterEl = document.getElementById('congress-rep-filter');
-const congressRefreshBtn = document.getElementById('congress-refresh');
-const congressBodyEl = document.getElementById('congress-body');
-const congressUpdatedEl = document.getElementById('congress-updated');
 const newsStocksBodyEl = document.getElementById('news-stocks-body');
 const newsCryptoBodyEl = document.getElementById('news-crypto-body');
 const newsRefreshBtn = document.getElementById('news-refresh');
@@ -185,13 +179,6 @@ function renderWatchlistBar() {
   });
 }
 
-function renderCongressFilterOptions() {
-  const current = congressFilterEl.value;
-  congressFilterEl.innerHTML = '<option value="">Recent activity (all tickers)</option>' +
-    watchlist.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
-  if (watchlist.includes(current)) congressFilterEl.value = current;
-}
-
 function addTicker(symbolRaw) {
   const symbol = symbolRaw.trim().toUpperCase();
   if (!symbol || !/^[A-Z0-9.\-]{1,10}$/.test(symbol)) {
@@ -206,7 +193,6 @@ function addTicker(symbolRaw) {
   watchlist.push(symbol);
   saveWatchlist(watchlist);
   renderWatchlistBar();
-  renderCongressFilterOptions();
   renderDashboard();
 }
 
@@ -215,7 +201,6 @@ function removeTicker(symbol) {
   saveWatchlist(watchlist);
   streamUnsubscribe(symbol, 'stock');
   renderWatchlistBar();
-  renderCongressFilterOptions();
   renderDashboard();
 }
 
@@ -1221,7 +1206,7 @@ function cardSkeleton(symbol) {
   `;
 }
 
-async function fillStockCard(card, symbol, { showNews = true, collapsed = false, showCongress = true } = {}) {
+async function fillStockCard(card, symbol, { showNews = true, collapsed = false } = {}) {
   try {
     const quoteRes = await fetchJson(`/api/quote?symbol=${encodeURIComponent(symbol)}`);
 
@@ -1264,7 +1249,7 @@ async function fillStockCard(card, symbol, { showNews = true, collapsed = false,
     // Dividend/predictions/news/chart are only fetched once the card is actually
     // expanded - fetching them for every collapsed dashboard card upfront was
     // tripping Finnhub/Yahoo's rate limits on a full watchlist load.
-    if (!collapsed) await loadStockCardDetails(card, symbol, { showNews, showCongress });
+    if (!collapsed) await loadStockCardDetails(card, symbol, { showNews });
   } catch (err) {
     card.innerHTML = `
       <div class="ticker-card-head">
@@ -1275,7 +1260,7 @@ async function fillStockCard(card, symbol, { showNews = true, collapsed = false,
   }
 }
 
-async function loadStockCardDetails(card, symbol, { showNews = false, showCongress = true } = {}) {
+async function loadStockCardDetails(card, symbol, { showNews = false } = {}) {
   const details = card.querySelector('.ticker-card-details');
   if (!details) return;
   try {
@@ -1283,8 +1268,7 @@ async function loadStockCardDetails(card, symbol, { showNews = false, showCongre
       showNews ? fetchJson(`/api/news?symbol=${encodeURIComponent(symbol)}`) : Promise.resolve({ items: [] }),
       fetchJson(`/api/dividend?symbol=${encodeURIComponent(symbol)}`).catch(() => ({ paysDividend: false })),
       fetchJson(`/api/predictions?symbol=${encodeURIComponent(symbol)}`).catch(() => null),
-      // Already looking at this ticker's trades from the Congressional Trades tab itself - redundant there.
-      showCongress ? fetchJson(`/api/congress?symbol=${encodeURIComponent(symbol)}&days=365`).catch(() => ({ trades: [] })) : Promise.resolve(null),
+      fetchJson(`/api/congress?symbol=${encodeURIComponent(symbol)}&days=365`).catch(() => ({ trades: [] })),
     ]);
 
     const newsHtml = newsRes.items?.length
@@ -1293,7 +1277,7 @@ async function loadStockCardDetails(card, symbol, { showNews = false, showCongre
 
     const dividendHtml = dividendBlockHtml(dividendRes, parseFloat(card.dataset.lastPrice) || null);
     const predictionsHtml = predictionsBlockHtml(predictionsRes);
-    const congressHtml = congressRes ? congressCardBlockHtml(congressRes.trades || []) : '';
+    const congressHtml = congressCardBlockHtml(congressRes.trades || []);
 
     details.innerHTML = `
       ${chartBlockHtml(symbol, 'stock')}
@@ -1457,7 +1441,7 @@ function renderCryptoDashboard() {
 
 // --- Ticker detail modal ---
 
-function openTickerDetail(symbol, assetType, { showCongress = true } = {}) {
+function openTickerDetail(symbol, assetType) {
   tickerModalBodyEl.dataset.symbol = symbol;
   tickerModalBodyEl.dataset.assetType = assetType;
   tickerModalBodyEl.innerHTML = `
@@ -1472,7 +1456,7 @@ function openTickerDetail(symbol, assetType, { showCongress = true } = {}) {
   tickerModalOverlayEl.hidden = false;
   document.body.classList.add('modal-open');
   if (assetType === 'crypto') fillCryptoCard(tickerModalBodyEl, symbol);
-  else fillStockCard(tickerModalBodyEl, symbol, { showCongress });
+  else fillStockCard(tickerModalBodyEl, symbol);
 }
 
 function closeTickerDetail() {
@@ -1493,23 +1477,6 @@ function handleChipSymbolClick(e) {
 
 watchlistBarEl.addEventListener('click', handleChipSymbolClick);
 cryptoWatchlistBarEl.addEventListener('click', handleChipSymbolClick);
-congressBodyEl.addEventListener('click', (e) => {
-  const tickerBtn = e.target.closest('.ticker-link-btn');
-  if (tickerBtn && tickerBtn.dataset.symbol) {
-    // Already on the Congressional Trades tab - showing this ticker's own trades again would be redundant.
-    openTickerDetail(tickerBtn.dataset.symbol, 'stock', { showCongress: false });
-    return;
-  }
-
-  const groupRow = e.target.closest('.congress-group-row.expandable');
-  if (groupRow) {
-    const expanded = groupRow.classList.toggle('expanded');
-    const gid = groupRow.dataset.group;
-    congressBodyEl.querySelectorAll(`.congress-detail-row[data-group="${gid}"]`).forEach((row) => {
-      row.classList.toggle('hidden', !expanded);
-    });
-  }
-});
 
 tickerModalCloseEl.addEventListener('click', closeTickerDetail);
 tickerModalOverlayEl.addEventListener('click', (e) => {
@@ -1566,13 +1533,6 @@ function fmtAmountEstimate(n) {
   return `~$${Math.round(n).toLocaleString()}`;
 }
 
-function formatAmountCell(t) {
-  const mid = fmtAmountEstimate(amountMidValue(t));
-  const range = t.amount || '—';
-  if (!mid) return escapeHtml(range);
-  return `${escapeHtml(mid)}<div class="muted small">${escapeHtml(range)}</div>`;
-}
-
 // Collapses consecutive-or-not trades from the same representative into one
 // expandable group so a single busy filer doesn't dominate the feed.
 function groupByRepresentative(trades) {
@@ -1587,146 +1547,6 @@ function groupByRepresentative(trades) {
     groups.get(key).push(t);
   });
   return order.map((key) => ({ representative: key, trades: groups.get(key) }));
-}
-
-function tradeRowCells(t, { byDisclosure, primary, secondary }) {
-  const action = tradeAction(t.type);
-  return `
-      <td>${escapeHtml(primary || '—')}<div class="muted small">${escapeHtml(daysAgo(primary))}</div></td>
-      <td class="trader-cell">
-        <div class="trader-name">${escapeHtml(t.representative || '—')}</div>
-        <div class="muted small">${partyBadge(t.party)} ${escapeHtml(chamberLabel(t.chamber))} ${escapeHtml(t.district || '—')} · ${escapeHtml(t.owner || 'Self')}</div>
-      </td>
-      <td><span class="badge ${action.cls}">${escapeHtml(action.label)}</span></td>
-      <td class="ticker-cell">${t.ticker ? `<button type="button" class="ticker-link-btn" data-symbol="${escapeHtml(t.ticker)}">${escapeHtml(t.ticker)}</button>` : '—'}</td>
-      <td>${formatAmountCell(t)}</td>
-      <td class="muted small">${escapeHtml(secondary || '—')}</td>
-  `;
-}
-
-function renderCongressTrades(trades, { sortedBy = 'transaction' } = {}) {
-  if (!trades.length) {
-    congressBodyEl.innerHTML = '<p class="muted">No congressional trades found for this ticker/date range.</p>';
-    return;
-  }
-
-  // In "recent activity" mode the feed is sorted by disclosure date - filings trickle
-  // in weeks after the actual trade, so disclosure date is the freshest signal we have.
-  const byDisclosure = sortedBy === 'disclosure';
-  const primaryLabel = byDisclosure ? 'Disclosed' : 'Date';
-  const secondaryLabel = byDisclosure ? 'Traded' : 'Disclosed';
-
-  const groups = groupByRepresentative(trades);
-
-  const rows = groups.map((group, gi) => {
-    const first = group.trades[0];
-    const isGroup = group.trades.length > 1;
-    const primaryDate = byDisclosure ? first.disclosure_date : first.transaction_date;
-    const secondaryDate = byDisclosure ? first.transaction_date : first.disclosure_date;
-
-    if (!isGroup) {
-      return `<tr>${tradeRowCells(first, { byDisclosure, primary: primaryDate, secondary: secondaryDate })}</tr>`;
-    }
-
-    const buyTrades = group.trades.filter((t) => tradeAction(t.type).cls === 'buy');
-    const sellTrades = group.trades.filter((t) => tradeAction(t.type).cls === 'sell');
-    const buyTotal = fmtAmountEstimate(buyTrades.reduce((sum, t) => sum + (amountMidValue(t) || 0), 0));
-    const sellTotal = fmtAmountEstimate(sellTrades.reduce((sum, t) => sum + (amountMidValue(t) || 0), 0));
-    const tickers = [...new Set(group.trades.map((t) => t.ticker).filter(Boolean))];
-    const tickerPreview = tickers.slice(0, 4).join(', ') + (tickers.length > 4 ? `, +${tickers.length - 4} more` : '');
-
-    const headerRow = `
-    <tr class="congress-group-row expandable" data-group="${gi}">
-      <td>${escapeHtml(primaryDate || '—')}<div class="muted small">${escapeHtml(daysAgo(primaryDate))}</div></td>
-      <td class="trader-cell">
-        <div class="trader-name"><span class="expand-caret">▸</span> ${escapeHtml(group.representative)} <span class="muted small">(${group.trades.length} trades)</span></div>
-        <div class="muted small">${partyBadge(first.party)} ${escapeHtml(chamberLabel(first.chamber))} ${escapeHtml(first.district || '—')} · ${escapeHtml(first.owner || 'Self')}</div>
-      </td>
-      <td>${buyTrades.length ? `<span class="badge buy">${buyTrades.length} Buy</span>` : ''}${sellTrades.length ? ` <span class="badge sell">${sellTrades.length} Sell</span>` : ''}</td>
-      <td class="ticker-cell">${escapeHtml(tickerPreview)}</td>
-      <td>${buyTotal ? `<div class="amount-buy">${escapeHtml(buyTotal)} bought</div>` : ''}${sellTotal ? `<div class="amount-sell">${escapeHtml(sellTotal)} sold</div>` : ''}<div class="muted small">click to expand</div></td>
-      <td class="muted small">—</td>
-    </tr>`;
-
-    const detailRows = group.trades.map((t) => {
-      const pDate = byDisclosure ? t.disclosure_date : t.transaction_date;
-      const sDate = byDisclosure ? t.transaction_date : t.disclosure_date;
-      return `<tr class="congress-detail-row hidden" data-group="${gi}">${tradeRowCells(t, { byDisclosure, primary: pDate, secondary: sDate })}</tr>`;
-    }).join('');
-
-    return headerRow + detailRows;
-  }).join('');
-
-  congressBodyEl.innerHTML = `
-    <table class="congress-table">
-      <thead>
-        <tr>
-          <th>${primaryLabel}</th><th>Who</th><th>Action</th><th>Ticker</th><th>Amount</th><th>${secondaryLabel}</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
-}
-
-function renderCongressUpdated(latestDisclosureDate) {
-  const parts = [`Fetched ${new Date().toLocaleTimeString()}`];
-  if (latestDisclosureDate) {
-    parts.push(`Latest disclosure on file: ${latestDisclosureDate} (${daysAgo(latestDisclosureDate)}) — filers have up to 45 days to report a trade`);
-  }
-  congressUpdatedEl.textContent = parts.join(' · ');
-}
-
-async function loadCongressTrades({ forceRefresh = false } = {}) {
-  const custom = congressCustomEl.value.trim().toUpperCase();
-  const selected = congressFilterEl.value;
-  const tickersToQuery = custom ? [custom] : (selected ? [selected] : null);
-  const repQuery = congressRepFilterEl.value.trim();
-
-  congressBodyEl.innerHTML = '<p class="spinner">Loading congressional trades…</p>';
-
-  try {
-    if (tickersToQuery) {
-      const results = await Promise.all(
-        tickersToQuery.map((sym) => {
-          const params = new URLSearchParams({ symbol: sym });
-          if (repQuery) params.set('rep', repQuery);
-          if (forceRefresh) params.set('refresh', '1');
-          return fetchJson(`/api/congress?${params}`).catch((err) => ({
-            symbol: sym, available: false, trades: [], message: err.message,
-          }));
-        })
-      );
-
-      const unavailable = results.find((r) => r.available === false);
-      if (unavailable) {
-        congressBodyEl.innerHTML = `<div class="notice">${escapeHtml(unavailable.message || 'Congressional trading data is unavailable.')}</div>`;
-        return;
-      }
-
-      const allTrades = results.flatMap((r) => r.trades || []);
-      renderCongressTrades(allTrades, { sortedBy: 'transaction' });
-      renderCongressUpdated(results.map((r) => r.latestDisclosureDate).filter(Boolean).sort().pop());
-    } else {
-      // No ticker picked: show the most recently *disclosed* trades across every
-      // ticker - who is buying/selling what right now. A representative search
-      // widens the window to their full history instead of just the last 2 weeks.
-      const params = new URLSearchParams({ limit: '150' });
-      if (repQuery) params.set('rep', repQuery);
-      else params.set('days', '14');
-      if (forceRefresh) params.set('refresh', '1');
-
-      const result = await fetchJson(`/api/congress?${params}`);
-      if (result.available === false) {
-        congressBodyEl.innerHTML = `<div class="notice">${escapeHtml(result.message || 'Congressional trading data is unavailable.')}</div>`;
-        return;
-      }
-      renderCongressTrades(result.trades || [], { sortedBy: 'disclosure' });
-      renderCongressUpdated(result.latestDisclosureDate);
-    }
-  } catch (err) {
-    congressBodyEl.innerHTML = `<p class="error-text">Failed to load congressional trades: ${escapeHtml(err.message)}</p>`;
-  }
 }
 
 let newsTabLoaded = false;
@@ -1916,31 +1736,7 @@ addCryptoForm.addEventListener('submit', (e) => {
   cryptoInput.value = '';
 });
 
-congressFilterEl.addEventListener('change', () => {
-  congressCustomEl.value = '';
-  loadCongressTrades();
-});
-congressRefreshBtn.addEventListener('click', () => loadCongressTrades({ forceRefresh: true }));
 newsRefreshBtn.addEventListener('click', () => loadNewsTab());
-congressCustomEl.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    loadCongressTrades();
-  }
-});
-
-let congressRepDebounce = null;
-congressRepFilterEl.addEventListener('input', () => {
-  clearTimeout(congressRepDebounce);
-  congressRepDebounce = setTimeout(loadCongressTrades, 400);
-});
-congressRepFilterEl.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    clearTimeout(congressRepDebounce);
-    loadCongressTrades();
-  }
-});
 
 function handlePeriodClick(e) {
   const btn = e.target.closest('.period-btn');
@@ -2151,7 +1947,6 @@ subtabButtons.forEach((btn) => {
 
 function refreshActiveTab() {
   const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
-  if (activeTab === 'congress') return loadCongressTrades({ forceRefresh: true });
   if (activeTab === 'news') return loadNewsTab();
   if (activeTab === 'crypto') return Promise.all(loadedSymbols(cryptoDashboardEl, cryptoWatchlist).map(loadCryptoCard));
   if (activeTab === 'tools') return Promise.resolve();
@@ -2221,13 +2016,11 @@ if (pullRefreshEl && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
 
 renderStarsField();
 renderWatchlistBar();
-renderCongressFilterOptions();
 renderDashboard();
 renderCryptoWatchlistBar();
 renderCryptoDashboard();
 renderTickerTape();
 loadTickerTape();
-loadCongressTrades();
 startLivePolling();
 
 setInterval(() => {
@@ -2239,10 +2032,6 @@ setInterval(() => {
   loadTickerTape();
 }, REFRESH_MS);
 
-// Filings trickle in over hours/days, so the congress panel refreshes on its
-// own slower cadence instead of the 30s price loop.
-const CONGRESS_REFRESH_MS = 5 * 60_000;
-setInterval(loadCongressTrades, CONGRESS_REFRESH_MS);
-
-// News also refreshes on a slower cadence, and only once the tab has been opened.
-setInterval(() => { if (newsTabLoaded) loadNewsTab(); }, CONGRESS_REFRESH_MS);
+// News refreshes on a slower cadence than the 30s price loop, and only once the tab has been opened.
+const NEWS_REFRESH_MS = 5 * 60_000;
+setInterval(() => { if (newsTabLoaded) loadNewsTab(); }, NEWS_REFRESH_MS);

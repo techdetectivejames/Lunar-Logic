@@ -30,7 +30,6 @@
       <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-tab="stocks">Stocks</button>
       <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="crypto">Crypto</button>
       <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="news">News</button>
-      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="congress">Congressional Trades</button>
       <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tools">Tools</button>
     </nav>
 
@@ -75,28 +74,6 @@
       <section class="subtab-panel" id="subtab-news-crypto" role="tabpanel" hidden>
         <div id="news-crypto-body" class="news-list">
           <p class="muted">Loading crypto news…</p>
-        </div>
-      </section>
-    </section>
-
-    <section class="tab-panel" id="tab-congress" role="tabpanel" hidden>
-      <section class="congress-section">
-        <div class="congress-header">
-          <h2>Congressional Trades</h2>
-          <div class="congress-controls">
-            <label for="congress-ticker-filter">Filter by ticker</label>
-            <select id="congress-ticker-filter">
-              <option value="">Recent activity (all tickers)</option>
-            </select>
-            <input id="congress-ticker-custom" type="text" placeholder="or type any symbol…" maxlength="10" />
-            <label for="congress-rep-filter">Representative</label>
-            <input id="congress-rep-filter" type="text" placeholder="Search by name…" maxlength="100" />
-            <button id="congress-refresh">Refresh</button>
-          </div>
-        </div>
-        <p id="congress-updated" class="muted small congress-updated"></p>
-        <div id="congress-body" class="congress-body">
-          <p class="muted">Loading recent congressional trading activity (House + Senate)…</p>
         </div>
       </section>
     </section>
