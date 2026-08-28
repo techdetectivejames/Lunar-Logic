@@ -153,6 +153,19 @@ app.get('/api/dividend', async (req, res) => {
   }
 });
 
+app.get('/api/dividend-history', async (req, res) => {
+  const symbol = String(req.query.symbol || '').toUpperCase();
+  const years = Math.min(Math.max(parseInt(req.query.years, 10) || 5, 1), 10);
+  if (!isValidSymbol(symbol)) return res.status(400).json({ error: 'Invalid symbol' });
+
+  try {
+    const result = await yfinance.getDividendHistory(symbol, years);
+    res.json(result);
+  } catch (err) {
+    res.status(502).json({ error: err.message, symbol, history: [], source: 'yfinance' });
+  }
+});
+
 const VALID_PERIODS = new Set(['5d', '1mo', '3mo', '6mo', '1y', '2y', '5y']);
 
 app.get('/api/candles', async (req, res) => {

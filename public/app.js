@@ -63,6 +63,13 @@ const dividendCalcAmountEl = document.getElementById('dividend-calc-amount');
 const dividendCalcResultEl = document.getElementById('dividend-calc-result');
 const dividendCalcLoadBtn = document.getElementById('dividend-calc-load');
 const dividendCalcPreviewEl = document.getElementById('dividend-calc-preview');
+const dividendRocForm = document.getElementById('dividend-roc-form');
+const dividendRocSymbolsEl = document.getElementById('dividend-roc-symbols');
+const dividendRocYearsEl = document.getElementById('dividend-roc-years');
+const dividendRocStatusEl = document.getElementById('dividend-roc-status');
+const dividendRocChartBlockEl = document.getElementById('dividend-roc-chart-block');
+const dividendRocCanvas = document.getElementById('dividend-roc-canvas');
+const dividendRocLegendEl = document.getElementById('dividend-roc-legend');
 const tabButtons = document.querySelectorAll('.tab-btn');
 const tabPanels = document.querySelectorAll('.tab-panel');
 const pullRefreshEl = document.getElementById('pull-refresh-indicator');
@@ -481,6 +488,205 @@ async function loadDividendPreview() {
 }
 
 dividendCalcLoadBtn.addEventListener('click', loadDividendPreview);
+
+// --- Dividend ROC (rate of change) chart ---
+
+const ROC_LINE_COLORS = ['#4d9bff', '#2ecc71', '#e74c3c', '#f1c40f', '#9b59b6', '#1abc9c', '#ff8a65', '#ec7fa9'];
+const MAX_ROC_TICKERS = 8;
+let lastRocSeries = null; // redrawn on resize / tab reveal since a hidden canvas has zero size
+
+// Turns a sorted [{date, amount}] payment history into % change vs. the
+// previous payment (there's no "previous" for the first entry, so it's dropped).
+function computeDividendRocSeries(history) {
+  const points = [];
+  for (let i = 1; i < history.length; i += 1) {
+    const prev = history[i - 1];
+    const cur = history[i];
+    if (!prev.amount) continue;
+    points.push({ date: cur.date, pct: Math.round(((cur.amount - prev.amount) / prev.amount) * 10000) / 100 });
+  }
+  return points;
+}
+
+function drawDividendRocChart(canvas, series) {
+  const wrap = canvas.parentElement;
+  const tooltip = wrap.querySelector('.chart-tooltip');
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = canvas.clientWidth || 320;
+  const cssHeight = canvas.clientHeight || 160;
+  canvas.width = cssWidth * dpr;
+  canvas.height = cssHeight * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+  const allPoints = series.flatMap((s) => s.points);
+  if (!allPoints.length) {
+    ctx.fillStyle = '#8b93a7';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('No dividend history available for these tickers.', 8, cssHeight / 2);
+    return;
+  }
+
+  const padding = { top: 8, bottom: 16, left: 4, right: 50 };
+  const plotW = cssWidth - padding.left - padding.right;
+  const plotH = cssHeight - padding.top - padding.bottom;
+
+  const times = allPoints.map((p) => new Date(p.date).getTime());
+  const minT = Math.min(...times);
+  const maxT = Math.max(...times);
+  const timeRange = maxT - minT || 1;
+
+  const pcts = allPoints.map((p) => p.pct);
+  let minPct = Math.min(0, ...pcts);
+  let maxPct = Math.max(0, ...pcts);
+  if (minPct === maxPct) { minPct -= 1; maxPct += 1; }
+  const pctRange = maxPct - minPct;
+
+  const xFor = (t) => padding.left + ((t - minT) / timeRange) * plotW;
+  const yFor = (pct) => padding.top + plotH - ((pct - minPct) / pctRange) * plotH;
+
+  const GRID_LINES = 4;
+  ctx.font = '10px sans-serif';
+  for (let i = 0; i <= GRID_LINES; i += 1) {
+    const val = minPct + (pctRange * i) / GRID_LINES;
+    const y = yFor(val);
+    ctx.strokeStyle = 'rgba(139, 147, 167, 0.15)';
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(cssWidth - padding.right, y);
+    ctx.stroke();
+    ctx.fillStyle = '#8b93a7';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${val.toFixed(1)}%`, cssWidth - padding.right + 4, y + 3);
+  }
+
+  if (minPct < 0 && maxPct > 0) {
+    ctx.strokeStyle = 'rgba(139, 147, 167, 0.4)';
+    ctx.beginPath();
+    ctx.moveTo(padding.left, yFor(0));
+    ctx.lineTo(cssWidth - padding.right, yFor(0));
+    ctx.stroke();
+  }
+
+  const TICKS = 5;
+  ctx.textAlign = 'center';
+  for (let i = 0; i < TICKS; i += 1) {
+    const t = minT + (timeRange * i) / (TICKS - 1);
+    ctx.fillText(formatAxisDate(new Date(t).toISOString().slice(0, 10)), xFor(t), cssHeight - 2);
+  }
+  ctx.textAlign = 'left';
+
+  series.forEach((s) => {
+    if (!s.points.length) return;
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    s.points.forEach((p, i) => {
+      const x = xFor(new Date(p.date).getTime());
+      const y = yFor(p.pct);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    ctx.fillStyle = s.color;
+    s.points.forEach((p) => {
+      ctx.beginPath();
+      ctx.arc(xFor(new Date(p.date).getTime()), yFor(p.pct), 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  });
+
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const t = minT + ((x - padding.left) / plotW) * timeRange;
+
+    const hits = [];
+    series.forEach((s) => {
+      if (!s.points.length) return;
+      let closest = s.points[0];
+      let closestDiff = Math.abs(new Date(closest.date).getTime() - t);
+      s.points.forEach((p) => {
+        const diff = Math.abs(new Date(p.date).getTime() - t);
+        if (diff < closestDiff) { closest = p; closestDiff = diff; }
+      });
+      if (Math.abs(xFor(new Date(closest.date).getTime()) - x) < 30) {
+        hits.push({ symbol: s.symbol, color: s.color, point: closest });
+      }
+    });
+
+    if (!tooltip) return;
+    if (!hits.length) { tooltip.hidden = true; return; }
+
+    tooltip.hidden = false;
+    tooltip.style.left = `${Math.min(x + 12, cssWidth - 150)}px`;
+    tooltip.style.top = `${Math.min(y + 12, Math.max(0, cssHeight - 20 * hits.length - 10))}px`;
+    tooltip.innerHTML = hits
+      .map((h) => `<strong style="color:${h.color}">${escapeHtml(h.symbol)}</strong> ${fmtPct(h.point.pct)} · ${escapeHtml(h.point.date)}`)
+      .join('<br>');
+  };
+
+  canvas.onmouseleave = () => { if (tooltip) tooltip.hidden = true; };
+}
+
+async function plotDividendRoc(e) {
+  e.preventDefault();
+  const symbols = [...new Set(
+    dividendRocSymbolsEl.value.split(/[,\s]+/).map((s) => s.trim().toUpperCase()).filter(Boolean)
+  )].slice(0, MAX_ROC_TICKERS);
+
+  if (!symbols.length) {
+    dividendRocStatusEl.textContent = 'Enter at least one ticker.';
+    dividendRocChartBlockEl.hidden = true;
+    return;
+  }
+
+  const years = parseInt(dividendRocYearsEl.value, 10) || 5;
+  dividendRocStatusEl.textContent = 'Loading dividend history…';
+  dividendRocChartBlockEl.hidden = true;
+
+  const results = await Promise.all(symbols.map(async (symbol) => {
+    try {
+      const res = await fetchJson(`/api/dividend-history?symbol=${encodeURIComponent(symbol)}&years=${years}`);
+      return { symbol, history: res.history || [] };
+    } catch {
+      return { symbol, history: [] };
+    }
+  }));
+
+  const series = results.map((r, i) => ({
+    symbol: r.symbol,
+    color: ROC_LINE_COLORS[i % ROC_LINE_COLORS.length],
+    points: computeDividendRocSeries(r.history),
+  }));
+
+  const missing = series.filter((s) => !s.points.length).map((s) => s.symbol);
+  const usable = series.filter((s) => s.points.length);
+
+  if (!usable.length) {
+    dividendRocStatusEl.textContent = `No dividend history found for ${missing.join(', ')}.`;
+    dividendRocChartBlockEl.hidden = true;
+    lastRocSeries = null;
+    return;
+  }
+
+  dividendRocStatusEl.textContent = missing.length
+    ? `No dividend history for ${missing.join(', ')} - showing the rest.`
+    : '';
+
+  dividendRocLegendEl.innerHTML = usable
+    .map((s) => `<span class="roc-legend-item"><i style="background:${s.color}"></i>${escapeHtml(s.symbol)}</span>`)
+    .join('');
+
+  dividendRocChartBlockEl.hidden = false;
+  lastRocSeries = usable;
+  drawDividendRocChart(dividendRocCanvas, usable);
+}
+
+dividendRocForm.addEventListener('submit', plotDividendRoc);
 
 function chartBlockHtml(symbol, assetType = 'stock') {
   const period = cardPeriod.get(`${assetType}:${symbol}`) || '1mo';
@@ -1751,6 +1957,7 @@ function handleAffectedTickerClick(e) {
 
 window.addEventListener('resize', () => {
   document.querySelectorAll('.ticker-card').forEach(redrawChartForCard);
+  if (lastRocSeries) drawDividendRocChart(dividendRocCanvas, lastRocSeries);
 });
 
 let tapeResizeTimer = null;
@@ -1775,6 +1982,7 @@ tabButtons.forEach((btn) => {
     });
     // canvases drawn while hidden fall back to a default size, so redraw once visible
     document.querySelectorAll(`#tab-${target} .ticker-card`).forEach(redrawChartForCard);
+    if (target === 'tools' && lastRocSeries) drawDividendRocChart(dividendRocCanvas, lastRocSeries);
     if (target === 'news' && !newsTabLoaded) loadNewsTab();
   });
 });

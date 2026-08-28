@@ -148,6 +148,29 @@ function getDividendInfo(symbol) {
   });
 }
 
+const dividendHistoryCache = new Map();
+const DIVIDEND_HISTORY_TTL_MS = 6 * 60 * 60 * 1000; // dividend schedules rarely change intraday
+
+// Full payment-by-payment dividend history (date + per-share amount), used to
+// chart dividend rate-of-change over time rather than just the current rate.
+function getDividendHistory(symbol, years) {
+  const cacheKey = `${symbol}|${years}`;
+  return withCache(dividendHistoryCache, cacheKey, DIVIDEND_HISTORY_TTL_MS, async () => {
+    const chart = await yahooFinance.chart(symbol, {
+      period1: new Date(Date.now() - years * 365 * 24 * 60 * 60 * 1000),
+      interval: '1d',
+      events: 'div',
+    });
+
+    const history = (chart.events?.dividends || [])
+      .map((d) => ({ date: toDateStr(d.date), amount: round4(d.amount) }))
+      .filter((d) => d.date && typeof d.amount === 'number')
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    return { symbol: symbol.toUpperCase(), history, source: 'yfinance' };
+  });
+}
+
 const quoteCache = new Map();
 const QUOTE_TTL_MS = 15_000;
 
@@ -215,5 +238,5 @@ function getCandles(symbol, period) {
   });
 }
 
-module.exports = { getDividendInfo, getQuoteAndProfile, getCandles };
+module.exports = { getDividendInfo, getDividendHistory, getQuoteAndProfile, getCandles };
 
