@@ -634,6 +634,10 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
 
   const indexForX = (x) => Math.min(n - 1, Math.max(0, Math.floor((x - padding.left) / slot)));
 
+  // Snapshot of the static chart, so the line-chart hover dot can be repainted
+  // on top each mousemove without redrawing the whole chart from scratch.
+  const baseSnapshot = style === 'line' ? ctx.getImageData(0, 0, canvas.width, canvas.height) : null;
+
   // Drag-select a range on the chart to zoom in on it for a more precise view.
   let dragStartX = null;
 
@@ -649,8 +653,23 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
       selectionEl.style.width = `${width}px`;
     }
 
-    const candle = candles[indexForX(x)];
+    const idx = indexForX(x);
+    const candle = candles[idx];
     if (!candle || !tooltip) return;
+
+    if (baseSnapshot) {
+      ctx.putImageData(baseSnapshot, 0, 0);
+      const hx = xFor(idx);
+      const hy = yFor(candle.c);
+      ctx.beginPath();
+      ctx.arc(hx, hy, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#4d9bff';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+    }
+
     tooltip.hidden = false;
     tooltip.style.left = `${Math.min(x + 8, cssWidth - 130)}px`;
     tooltip.style.top = '4px';
@@ -700,6 +719,7 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
     dragStartX = null;
     if (selectionEl) selectionEl.hidden = true;
     if (tooltip) tooltip.hidden = true;
+    if (baseSnapshot) ctx.putImageData(baseSnapshot, 0, 0);
   };
 }
 
