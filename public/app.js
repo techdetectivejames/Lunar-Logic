@@ -940,6 +940,16 @@ function updateZoomResetVisibility(canvas, zoomed) {
   if (resetBtn) resetBtn.hidden = !zoomed;
 }
 
+// Dividends whose date actually falls inside the visible candle range -
+// shared by computeTotalReturnSeries and the toggle-enable check so both
+// agree on what counts as "this period has a dividend to show".
+function dividendsInWindow(candles, dividends) {
+  if (!candles.length || !dividends || !dividends.length) return [];
+  const start = candles[0].t;
+  const end = candles[candles.length - 1].t;
+  return dividends.filter((d) => d.date > start && d.date <= end && d.amount > 0);
+}
+
 // Builds price / dividends-as-cash / dividends-reinvested lines aligned to the
 // visible candles. Everything is re-based to 1 share held from the first shown
 // candle, so all three series start at the same value and their divergence over
@@ -952,11 +962,7 @@ function computeTotalReturnSeries(candles, dividends) {
   const reinvest = new Array(n);
   if (!n) return { price, cash, reinvest };
 
-  const start = candles[0].t;
-  const end = candles[n - 1].t;
-  const windowDivs = (dividends || [])
-    .filter((d) => d.date > start && d.date <= end && d.amount > 0)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const windowDivs = dividendsInWindow(candles, dividends).sort((a, b) => a.date.localeCompare(b.date));
 
   let divIdx = 0;
   let cumCash = 0;
@@ -995,10 +1001,13 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
     return;
   }
 
-  // Dividend overlay: total-return lines instead of raw price. Only active for
-  // stocks with a non-empty dividend history (toggle is greyed out otherwise).
+  // Dividend overlay: total-return lines instead of raw price. Only active when
+  // a dividend actually landed within the visible window - a quarterly payer
+  // viewed on "1mo"/"5d" usually has none, and drawing an overlay that's
+  // pixel-identical to the price line (with a legend implying otherwise) was
+  // the confusing "nothing happened" bug this replaces.
   const divs = dividendMode !== 'price' && key ? cardDividends.get(key) : null;
-  const divActive = !!(divs && divs.length);
+  const divActive = !!(divs && dividendsInWindow(candles, divs).length);
   const tr = divActive ? computeTotalReturnSeries(candles, divs) : null;
 
   // Extra right/bottom padding makes room for the price and date axis labels.
@@ -1269,17 +1278,28 @@ async function ensureCardDividends(key, symbol, type) {
 }
 
 // Enables/greys-out the dividend toggle buttons for a card and keeps the active
-// highlight in sync with the global mode (falling back to Price for tickers
-// that pay nothing, so users never see a confusing 0% total-return line).
-function updateDividendToggle(card, pays) {
+// highlight in sync with the global mode. Falls back to Price when the ticker
+// pays nothing at all, OR when it pays but none of its payments fall inside
+// the currently visible period - either way the overlay would be a no-op, so
+// users never see a toggle that silently does nothing.
+function updateDividendToggle(card, pays, hasDivsInWindow) {
   const toggle = card.querySelector('.dividend-mode-toggle');
   if (!toggle) return;
-  const effectiveMode = pays ? dividendMode : 'price';
-  toggle.classList.toggle('no-dividend', !pays);
+  const usable = pays && hasDivsInWindow;
+  const effectiveMode = usable ? dividendMode : 'price';
+  toggle.classList.toggle('no-dividend', !usable);
   toggle.querySelectorAll('.div-mode-btn').forEach((btn) => {
     const mode = btn.dataset.divMode;
-    btn.disabled = mode !== 'price' && !pays;
+    if (mode === 'price') return;
+    btn.disabled = !usable;
     btn.classList.toggle('active', mode === effectiveMode);
+    btn.title = !pays
+      ? "This ticker doesn't pay a dividend"
+      : !hasDivsInWindow
+        ? 'No dividend payments in the selected date range'
+        : mode === 'cash'
+          ? 'Total return with dividends taken as cash'
+          : 'Total return with dividends reinvested';
   });
 }
 
@@ -1297,7 +1317,7 @@ async function loadChartForCard(card) {
       fetchJson(`${apiPath}?symbol=${encodeURIComponent(symbol)}&period=${period}`),
       ensureCardDividends(key, symbol, type),
     ]);
-    updateDividendToggle(card, cardPaysDividend.get(key));
+    updateDividendToggle(card, cardPaysDividend.get(key), dividendsInWindow(res.candles, cardDividends.get(key)).length > 0);
     lastCandles.set(key, res.candles);
     zoomRanges.delete(key); // fresh data (new period) invalidates any prior zoom
     updateZoomResetVisibility(canvas, false);
@@ -2014,7 +2034,9 @@ function handleDividendModeClick(e) {
   // App-wide default - update every open card's toggle + chart to match.
   document.querySelectorAll('.ticker-card').forEach((card) => {
     const { symbol, assetType: type = 'stock' } = card.dataset;
-    updateDividendToggle(card, cardPaysDividend.get(`${type}:${symbol}`));
+    const key = `${type}:${symbol}`;
+    const hasDivsInWindow = dividendsInWindow(visibleCandles(key) || [], cardDividends.get(key)).length > 0;
+    updateDividendToggle(card, cardPaysDividend.get(key), hasDivsInWindow);
     redrawChartForCard(card);
   });
 }
