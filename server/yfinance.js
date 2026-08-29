@@ -242,5 +242,44 @@ function getCandles(symbol, period) {
   });
 }
 
-module.exports = { getDividendInfo, getDividendHistory, getQuoteAndProfile, getCandles };
+const totalReturnCache = new Map();
+const TOTAL_RETURN_TTL_MS = 60 * 60 * 1000; // closing prices/dividends for past dates never change
+
+// Simple cash-dividend total return between two dates: sums every dividend
+// paid in the window and adds it to price appreciation, per
+// Total Return % = [(End Price - Start Price) + Dividends Received] / Start Price x 100
+function getTotalReturn(symbol, fromDate, toDate) {
+  const cacheKey = `${symbol}|${fromDate}|${toDate}`;
+  return withCache(totalReturnCache, cacheKey, TOTAL_RETURN_TTL_MS, async () => {
+    const period1 = new Date(fromDate);
+    const period2 = new Date(new Date(toDate).getTime() + 24 * 60 * 60 * 1000); // Yahoo's period2 end is exclusive
+    const chart = await yahooFinance.chart(symbol, { period1, period2, interval: '1d', events: 'div' });
+
+    const quotes = (chart.quotes || []).filter((q) => q.close != null);
+    if (!quotes.length) throw new Error('No price data for that date range');
+    const start = quotes[0];
+    const end = quotes[quotes.length - 1];
+
+    const dividendsTotal = round4(
+      (chart.events?.dividends || []).reduce((sum, d) => sum + d.amount, 0)
+    );
+    const startPrice = round4(start.close);
+    const endPrice = round4(end.close);
+    const totalReturnPct = round4(((endPrice - startPrice + dividendsTotal) / startPrice) * 100);
+
+    return {
+      symbol: symbol.toUpperCase(),
+      startDate: toDateStr(start.date),
+      startPrice,
+      endDate: toDateStr(end.date),
+      endPrice,
+      dividendsTotal,
+      dividendCount: (chart.events?.dividends || []).length,
+      totalReturnPct,
+      source: 'yfinance',
+    };
+  });
+}
+
+module.exports = { getDividendInfo, getDividendHistory, getQuoteAndProfile, getCandles, getTotalReturn };
 

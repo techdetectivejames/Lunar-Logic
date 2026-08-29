@@ -67,6 +67,11 @@ const dividendCalcAmountEl = document.getElementById('dividend-calc-amount');
 const dividendCalcResultEl = document.getElementById('dividend-calc-result');
 const dividendCalcLoadBtn = document.getElementById('dividend-calc-load');
 const dividendCalcPreviewEl = document.getElementById('dividend-calc-preview');
+const totalReturnForm = document.getElementById('total-return-form');
+const totalReturnSymbolEl = document.getElementById('total-return-symbol');
+const totalReturnFromEl = document.getElementById('total-return-from');
+const totalReturnToEl = document.getElementById('total-return-to');
+const totalReturnResultEl = document.getElementById('total-return-result');
 const dividendRocForm = document.getElementById('dividend-roc-form');
 const dividendRocSymbolsEl = document.getElementById('dividend-roc-symbols');
 const dividendRocStatusEl = document.getElementById('dividend-roc-status');
@@ -485,6 +490,49 @@ async function loadDividendPreview() {
 }
 
 dividendCalcLoadBtn.addEventListener('click', loadDividendPreview);
+
+// --- Total return calculator ---
+
+async function calculateTotalReturn(e) {
+  e.preventDefault();
+  const symbol = totalReturnSymbolEl.value.trim().toUpperCase();
+  const from = totalReturnFromEl.value;
+  const to = totalReturnToEl.value;
+
+  if (!symbol || !/^[A-Z0-9.\-]{1,10}$/.test(symbol)) {
+    totalReturnResultEl.innerHTML = '<p class="error-text">Enter a valid ticker symbol.</p>';
+    return;
+  }
+  if (!from || !to || from >= to) {
+    totalReturnResultEl.innerHTML = '<p class="error-text">Start date must be before end date.</p>';
+    return;
+  }
+
+  totalReturnResultEl.innerHTML = '<p class="spinner">Calculating…</p>';
+
+  try {
+    const r = await fetchJson(`/api/total-return?symbol=${encodeURIComponent(symbol)}&from=${from}&to=${to}`);
+    const priceChange = r.endPrice - r.startPrice;
+    const priceReturnPct = (priceChange / r.startPrice) * 100;
+    const dividendReturnPct = (r.dividendsTotal / r.startPrice) * 100;
+
+    totalReturnResultEl.innerHTML = `
+      <div class="total-return-grid">
+        <div>Start<span>$${fmtMoney(r.startPrice)} <span class="muted small">(${escapeHtml(r.startDate)})</span></span></div>
+        <div>End<span>$${fmtMoney(r.endPrice)} <span class="muted small">(${escapeHtml(r.endDate)})</span></span></div>
+        <div>Price Change<span class="${changeClass(priceChange)}">${fmtMoney(priceChange)} (${fmtPct(priceReturnPct)})</span></div>
+        <div>Dividends Received<span>$${fmtMoney(r.dividendsTotal)}${r.dividendCount ? ` <span class="muted small">(${r.dividendCount} payment${r.dividendCount === 1 ? '' : 's'})</span>` : ''}</span></div>
+        <div>Dividend Return<span>${fmtPct(dividendReturnPct)}</span></div>
+        <div>Total Return<span class="${changeClass(r.totalReturnPct)}">${fmtPct(r.totalReturnPct)}</span></div>
+      </div>
+      <p class="muted small">Per-share basis, 1 share held from ${escapeHtml(r.startDate)} to ${escapeHtml(r.endDate)}. Total Return % = [(End − Start) + Dividends] / Start × 100.</p>
+    `;
+  } catch (err) {
+    totalReturnResultEl.innerHTML = `<p class="error-text">Failed to calculate: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+totalReturnForm.addEventListener('submit', calculateTotalReturn);
 
 // --- Dividend ROC (rate of change) chart ---
 

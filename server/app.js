@@ -166,6 +166,28 @@ app.get('/api/dividend-history', async (req, res) => {
   }
 });
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+app.get('/api/total-return', async (req, res) => {
+  const symbol = String(req.query.symbol || '').toUpperCase();
+  const from = String(req.query.from || '');
+  const to = String(req.query.to || '');
+  if (!isValidSymbol(symbol)) return res.status(400).json({ error: 'Invalid symbol' });
+  if (!ISO_DATE_RE.test(from) || !ISO_DATE_RE.test(to)) {
+    return res.status(400).json({ error: '"from" and "to" must be YYYY-MM-DD dates' });
+  }
+  if (new Date(from).getTime() >= new Date(to).getTime()) {
+    return res.status(400).json({ error: '"from" must be before "to"' });
+  }
+
+  try {
+    const result = await yfinance.getTotalReturn(symbol, from, to);
+    res.json(result);
+  } catch (err) {
+    res.status(502).json({ error: err.message || 'Failed to compute total return' });
+  }
+});
+
 const VALID_PERIODS = new Set(['5d', '1mo', '3mo', '6mo', '1y', '2y', '5y']);
 
 app.get('/api/candles', async (req, res) => {

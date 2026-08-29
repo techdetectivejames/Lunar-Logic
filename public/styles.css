@@ -760,6 +760,52 @@ body.live-connected .live-dot {
 }
 .dividend-calc-grid div span { display: block; color: var(--text); font-weight: 700; font-size: 0.95rem; }
 
+.total-return-section {
+  margin-top: 24px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  max-width: 640px;
+}
+.total-return-section h2 { margin: 0 0 4px; font-size: 1.1rem; }
+.total-return-form {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.total-return-form > div { display: flex; flex-direction: column; gap: 4px; }
+.total-return-form label { font-size: 0.8rem; color: var(--muted); }
+.total-return-form input {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 7px 10px;
+  border-radius: 6px;
+  width: 140px;
+}
+.total-return-form button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.total-return-form button:hover { opacity: 0.9; }
+.total-return-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.total-return-grid div span { display: block; color: var(--text); font-weight: 700; font-size: 0.95rem; }
+
 .dividend-roc-section {
   margin-top: 24px;
   background: var(--panel);
@@ -968,6 +1014,11 @@ body.modal-open { overflow: hidden; }
   .dividend-calc-form { flex-direction: column; align-items: stretch; }
   .dividend-calc-form input { width: 100%; }
   .dividend-calc-symbol-row input { width: auto; flex: 1; }
+  .total-return-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .total-return-form { flex-direction: column; align-items: stretch; }
+  .total-return-form input { width: 100%; }
 
   .dividend-roc-form { flex-direction: column; align-items: stretch; }
   .dividend-roc-form input { width: 100%; }

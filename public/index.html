@@ -104,6 +104,27 @@
         <div id="dividend-calc-result" class="dividend-calc-result"></div>
       </section>
 
+      <section class="total-return-section">
+        <h2>Total Return Calculator</h2>
+        <p class="muted small">Cash dividends (simple total return): sums every dividend paid between two dates and adds it to price appreciation. Total Return % = [(End Price − Start Price) + Dividends Received] / Start Price × 100.</p>
+        <form id="total-return-form" class="total-return-form" autocomplete="off">
+          <div>
+            <label for="total-return-symbol">Ticker</label>
+            <input id="total-return-symbol" type="text" placeholder="e.g. KO" maxlength="10" required />
+          </div>
+          <div>
+            <label for="total-return-from">Start date</label>
+            <input id="total-return-from" type="date" required />
+          </div>
+          <div>
+            <label for="total-return-to">End date</label>
+            <input id="total-return-to" type="date" required />
+          </div>
+          <button type="submit">Calculate</button>
+        </form>
+        <div id="total-return-result" class="total-return-result"></div>
+      </section>
+
       <section class="dividend-roc-section">
         <h2>Dividend History</h2>
         <p class="muted small">Plot the rate of change (% vs. the previous payment) of each ticker's dividend over time. Enter multiple tickers separated by commas.</p>
