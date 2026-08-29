@@ -168,6 +168,20 @@ function fmtPct(n) {
   return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
 }
 
+// Percent change from prev -> curr, or null when it can't be computed.
+function pctChange(prev, curr) {
+  if (typeof prev !== 'number' || typeof curr !== 'number' || prev === 0) return null;
+  return ((curr - prev) / prev) * 100;
+}
+
+// Coloured (green/red) rate-of-change chip for tooltips; empty when flat or
+// unknown so the info box stays blank when there's no difference.
+function rocSpan(pct) {
+  if (pct == null || Math.abs(pct) < 0.005) return '';
+  const color = pct > 0 ? '#2ecc71' : '#e74c3c';
+  return ` <span style="color:${color}">${fmtPct(pct)}</span>`;
+}
+
 function timeAgo(unixSeconds) {
   if (!unixSeconds) return '';
   const diffMs = Date.now() - unixSeconds * 1000;
@@ -1156,6 +1170,16 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
 
     const marker = divActive ? divMarkers.find((m) => m.idx === idx) : null;
 
+    // Rate of change vs the previous candle's close, coloured & blank when flat.
+    const priceRocHtml = rocSpan(pctChange(idx > 0 ? candles[idx - 1].c : null, candle.c));
+
+    // Rate of change of this payment vs the previous dividend payment.
+    let divRocHtml = '';
+    if (marker && divs) {
+      const di = divs.findIndex((d) => d.date === marker.date);
+      divRocHtml = rocSpan(pctChange(di > 0 ? divs[di - 1].amount : null, marker.amount));
+    }
+
     tooltip.hidden = false;
     // Follows the cursor, offset to its bottom-right, clamped so it stays inside the chart.
     tooltip.style.left = `${Math.min(x + 12, cssWidth - 150)}px`;
@@ -1163,8 +1187,8 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
     tooltip.innerHTML = `
       <strong>${escapeHtml(candle.t)}</strong>
       O ${fmtMoney(candle.o)} · H ${fmtMoney(candle.h)}<br>
-      L ${fmtMoney(candle.l)} · C ${fmtMoney(candle.c)}
-      ${marker ? `<br><span style="color:#2ecc71">Dividend $${fmtMoney(marker.amount)}/share</span>` : ''}
+      L ${fmtMoney(candle.l)} · C ${fmtMoney(candle.c)}${priceRocHtml}
+      ${marker ? `<br><span style="color:#2ecc71">Dividend $${fmtMoney(marker.amount)}/share</span>${divRocHtml}` : ''}
     `;
   };
 
