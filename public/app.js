@@ -29,8 +29,8 @@ const CHART_STYLES = [
 ];
 // Default chart style applies app-wide (not per-card) - changing it on any
 // open card updates every chart currently on screen and future ones too.
-let chartStyle = localStorage.getItem(CHART_STYLE_STORAGE_KEY) || 'candle';
-if (!CHART_STYLES.some((s) => s.id === chartStyle)) chartStyle = 'candle';
+let chartStyle = localStorage.getItem(CHART_STYLE_STORAGE_KEY) || 'line';
+if (!CHART_STYLES.some((s) => s.id === chartStyle)) chartStyle = 'line';
 
 const DIVIDEND_MODE_STORAGE_KEY = 'finapp.dividendMode';
 const DIVIDEND_MODES = ['price', 'dividend'];
