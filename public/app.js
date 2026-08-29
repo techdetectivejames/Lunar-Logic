@@ -515,17 +515,30 @@ async function calculateTotalReturn(e) {
     const priceChange = r.endPrice - r.startPrice;
     const priceReturnPct = (priceChange / r.startPrice) * 100;
     const dividendReturnPct = (r.dividendsTotal / r.startPrice) * 100;
+    const dripEndingValue = r.dripEndingShares * r.endPrice;
 
     totalReturnResultEl.innerHTML = `
-      <div class="total-return-grid">
-        <div>Start<span>$${fmtMoney(r.startPrice)} <span class="muted small">(${escapeHtml(r.startDate)})</span></span></div>
-        <div>End<span>$${fmtMoney(r.endPrice)} <span class="muted small">(${escapeHtml(r.endDate)})</span></span></div>
-        <div>Price Change<span class="${changeClass(priceChange)}">${fmtMoney(priceChange)} (${fmtPct(priceReturnPct)})</span></div>
-        <div>Dividends Received<span>$${fmtMoney(r.dividendsTotal)}${r.dividendCount ? ` <span class="muted small">(${r.dividendCount} payment${r.dividendCount === 1 ? '' : 's'})</span>` : ''}</span></div>
-        <div>Dividend Return<span>${fmtPct(dividendReturnPct)}</span></div>
-        <div>Total Return<span class="${changeClass(r.totalReturnPct)}">${fmtPct(r.totalReturnPct)}</span></div>
+      <div class="total-return-method">
+        <strong>Cash Dividends <span class="muted small">(simple - dividends banked, not reinvested)</span></strong>
+        <div class="total-return-grid">
+          <div>Start<span>$${fmtMoney(r.startPrice)} <span class="muted small">(${escapeHtml(r.startDate)})</span></span></div>
+          <div>End<span>$${fmtMoney(r.endPrice)} <span class="muted small">(${escapeHtml(r.endDate)})</span></span></div>
+          <div>Price Change<span class="${changeClass(priceChange)}">${fmtMoney(priceChange)} (${fmtPct(priceReturnPct)})</span></div>
+          <div>Dividends Received<span>$${fmtMoney(r.dividendsTotal)}${r.dividendCount ? ` <span class="muted small">(${r.dividendCount} payment${r.dividendCount === 1 ? '' : 's'})</span>` : ''}</span></div>
+          <div>Dividend Return<span>${fmtPct(dividendReturnPct)}</span></div>
+          <div>Total Return<span class="${changeClass(r.totalReturnPct)}">${fmtPct(r.totalReturnPct)}</span></div>
+        </div>
       </div>
-      <p class="muted small">Per-share basis, 1 share held from ${escapeHtml(r.startDate)} to ${escapeHtml(r.endDate)}. Total Return % = [(End − Start) + Dividends] / Start × 100.</p>
+      <div class="total-return-method">
+        <strong>DRIP <span class="muted small">(each payment reinvested into more shares at that day's price)</span></strong>
+        <div class="total-return-grid">
+          <div>Starting Shares<span>1.0000</span></div>
+          <div>Ending Shares<span>${r.dripEndingShares.toFixed(4)}</span></div>
+          <div>Ending Value<span>$${fmtMoney(dripEndingValue)}</span></div>
+          <div>Total Return<span class="${changeClass(r.dripTotalReturnPct)}">${fmtPct(r.dripTotalReturnPct)}</span></div>
+        </div>
+      </div>
+      <p class="muted small">Per-share basis, 1 share bought at ${escapeHtml(r.startDate)}, held to ${escapeHtml(r.endDate)}. Simple: Total Return % = [(End − Start) + Dividends] / Start × 100. DRIP: Ending shares = 1 × ∏(1 + dividend / price at payment); Total Return % = (Ending shares × End Price − Start) / Start × 100.</p>
     `;
   } catch (err) {
     totalReturnResultEl.innerHTML = `<p class="error-text">Failed to calculate: ${escapeHtml(err.message)}</p>`;

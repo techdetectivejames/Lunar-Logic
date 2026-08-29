@@ -805,6 +805,9 @@ body.live-connected .live-dot {
   margin-bottom: 10px;
 }
 .total-return-grid div span { display: block; color: var(--text); font-weight: 700; font-size: 0.95rem; }
+.total-return-method { margin-bottom: 14px; }
+.total-return-method strong { display: block; margin-bottom: 8px; font-size: 0.9rem; }
+.total-return-method:last-of-type { margin-bottom: 6px; }
 
 .dividend-roc-section {
   margin-top: 24px;

@@ -260,12 +260,22 @@ function getTotalReturn(symbol, fromDate, toDate) {
     const start = quotes[0];
     const end = quotes[quotes.length - 1];
 
-    const dividendsTotal = round4(
-      (chart.events?.dividends || []).reduce((sum, d) => sum + d.amount, 0)
-    );
+    const dividends = [...(chart.events?.dividends || [])].sort((a, b) => a.date - b.date);
+    const dividendsTotal = round4(dividends.reduce((sum, d) => sum + d.amount, 0));
     const startPrice = round4(start.close);
     const endPrice = round4(end.close);
     const totalReturnPct = round4(((endPrice - startPrice + dividendsTotal) / startPrice) * 100);
+
+    // DRIP: each payment buys more shares at that day's close, compounding the
+    // share count instead of just banking the cash - Ending shares = 1 x
+    // prod(1 + dividend_i / price_at_payment_i), reinvested at each payment date.
+    let dripShares = 1;
+    for (const d of dividends) {
+      const priceAtPayment = nearestClosePriceOnOrBefore(quotes, d.date) ?? startPrice;
+      dripShares *= 1 + d.amount / priceAtPayment;
+    }
+    dripShares = round4(dripShares);
+    const dripTotalReturnPct = round4(((dripShares * endPrice - startPrice) / startPrice) * 100);
 
     return {
       symbol: symbol.toUpperCase(),
@@ -274,11 +284,23 @@ function getTotalReturn(symbol, fromDate, toDate) {
       endDate: toDateStr(end.date),
       endPrice,
       dividendsTotal,
-      dividendCount: (chart.events?.dividends || []).length,
+      dividendCount: dividends.length,
       totalReturnPct,
+      dripEndingShares: dripShares,
+      dripTotalReturnPct,
       source: 'yfinance',
     };
   });
+}
+
+// Ex-dividend dates always land on a trading day the chart already covers,
+// but this walks backward just in case a date falls on a gap in the series.
+function nearestClosePriceOnOrBefore(quotes, targetDate) {
+  let best = null;
+  for (const q of quotes) {
+    if (q.date.getTime() <= targetDate.getTime() && (!best || q.date > best.date)) best = q;
+  }
+  return best ? round4(best.close) : null;
 }
 
 module.exports = { getDividendInfo, getDividendHistory, getQuoteAndProfile, getCandles, getTotalReturn };
