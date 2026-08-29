@@ -31,6 +31,16 @@ const CHART_STYLES = [
 // open card updates every chart currently on screen and future ones too.
 let chartStyle = localStorage.getItem(CHART_STYLE_STORAGE_KEY) || 'candle';
 if (!CHART_STYLES.some((s) => s.id === chartStyle)) chartStyle = 'candle';
+
+const DIVIDEND_MODE_STORAGE_KEY = 'finapp.dividendMode';
+const DIVIDEND_MODES = ['price', 'cash', 'reinvest'];
+// App-wide default (like chartStyle): 'price' = close only, 'cash' = total
+// return with dividends taken as cash, 'reinvest' = dividends reinvested.
+let dividendMode = localStorage.getItem(DIVIDEND_MODE_STORAGE_KEY) || 'price';
+if (!DIVIDEND_MODES.includes(dividendMode)) dividendMode = 'price';
+const cardDividends = new Map(); // `${type}:${symbol}` -> sorted [{date, amount}] (empty if none)
+const cardPaysDividend = new Map(); // `${type}:${symbol}` -> bool (dividend toggles greyed out when false)
+
 const INDEX_ITEMS = [
   { symbol: 'DIA', label: 'DOW' },
   { symbol: 'SPY', label: 'S&P 500' },
@@ -834,6 +844,11 @@ function chartBlockHtml(symbol, assetType = 'stock') {
           <button type="button" class="chart-zoom-reset" hidden>Reset Zoom</button>
         </div>
       </div>
+      <div class="dividend-mode-toggle" role="group" aria-label="Return view">
+        <button type="button" class="div-mode-btn active" data-div-mode="price">Price only</button>
+        <button type="button" class="div-mode-btn" data-div-mode="cash" disabled title="Total return with dividends taken as cash">+ Dividends (cash)</button>
+        <button type="button" class="div-mode-btn" data-div-mode="reinvest" disabled title="Total return with dividends reinvested">+ Dividends (reinvested)</button>
+      </div>
       <div class="chart-canvas-wrap">
         <canvas class="candle-canvas" data-symbol="${escapeHtml(symbol)}"></canvas>
         <div class="chart-zoom-selection" hidden></div>
@@ -864,6 +879,41 @@ function updateZoomResetVisibility(canvas, zoomed) {
   if (resetBtn) resetBtn.hidden = !zoomed;
 }
 
+// Builds price / dividends-as-cash / dividends-reinvested lines aligned to the
+// visible candles. Everything is re-based to 1 share held from the first shown
+// candle, so all three series start at the same value and their divergence over
+// the window is purely the dividend contribution. Reinvestment compounds each
+// payout into more shares at that day's close.
+function computeTotalReturnSeries(candles, dividends) {
+  const price = candles.map((c) => c.c);
+  const n = candles.length;
+  const cash = new Array(n);
+  const reinvest = new Array(n);
+  if (!n) return { price, cash, reinvest };
+
+  const start = candles[0].t;
+  const end = candles[n - 1].t;
+  const windowDivs = (dividends || [])
+    .filter((d) => d.date > start && d.date <= end && d.amount > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  let divIdx = 0;
+  let cumCash = 0;
+  let shares = 1;
+  for (let i = 0; i < n; i += 1) {
+    const priceHere = candles[i].c;
+    while (divIdx < windowDivs.length && windowDivs[divIdx].date <= candles[i].t) {
+      const amt = windowDivs[divIdx].amount;
+      cumCash += amt;
+      if (priceHere > 0) shares += (shares * amt) / priceHere;
+      divIdx += 1;
+    }
+    cash[i] = priceHere + cumCash;
+    reinvest[i] = shares * priceHere;
+  }
+  return { price, cash, reinvest };
+}
+
 function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
   const wrap = canvas.parentElement;
   const tooltip = wrap.querySelector('.chart-tooltip');
@@ -884,6 +934,12 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
     return;
   }
 
+  // Dividend overlay: total-return lines instead of raw price. Only active for
+  // stocks with a non-empty dividend history (toggle is greyed out otherwise).
+  const divs = dividendMode !== 'price' && key ? cardDividends.get(key) : null;
+  const divActive = !!(divs && divs.length);
+  const tr = divActive ? computeTotalReturnSeries(candles, divs) : null;
+
   // Extra right/bottom padding makes room for the price and date axis labels.
   const padding = { top: 8, bottom: 16, left: 4, right: 44 };
   const plotW = cssWidth - padding.left - padding.right;
@@ -891,8 +947,17 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
 
   const highs = candles.map((c) => c.h);
   const lows = candles.map((c) => c.l);
-  const max = Math.max(...highs);
-  const min = Math.min(...lows);
+  let max;
+  let min;
+  if (divActive) {
+    const vals = [...tr.price, ...tr.cash];
+    if (dividendMode === 'reinvest') vals.push(...tr.reinvest);
+    max = Math.max(...vals);
+    min = Math.min(...vals);
+  } else {
+    max = Math.max(...highs);
+    min = Math.min(...lows);
+  }
   const range = max - min || 1;
 
   const n = candles.length;
@@ -929,7 +994,42 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
   }
   ctx.textAlign = 'left';
 
-  if (style === 'line') {
+  if (divActive) {
+    const drawSeries = (arr, color, width) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      arr.forEach((v, i) => {
+        const x = xFor(i);
+        const y = yFor(v);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    };
+
+    drawSeries(tr.price, 'rgba(139, 147, 167, 0.6)', 1.25);
+    if (dividendMode === 'reinvest') {
+      drawSeries(tr.cash, 'rgba(241, 196, 64, 0.85)', 1.25);
+      drawSeries(tr.reinvest, '#2ecc71', 1.75);
+    } else {
+      drawSeries(tr.cash, '#f1c40f', 1.75);
+    }
+
+    // Inline legend so the three lines are distinguishable at a glance.
+    const legend = dividendMode === 'reinvest'
+      ? [['Price', '#8b93a7'], ['+ Div cash', '#f1c40f'], ['+ Div reinvested', '#2ecc71']]
+      : [['Price', '#8b93a7'], ['+ Div cash', '#f1c40f']];
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'left';
+    legend.forEach(([label, color], i) => {
+      const ly = padding.top + 8 + i * 12;
+      ctx.fillStyle = color;
+      ctx.fillRect(padding.left + 2, ly - 7, 8, 8);
+      ctx.fillStyle = '#c9d1e0';
+      ctx.fillText(label, padding.left + 14, ly);
+    });
+  } else if (style === 'line') {
     ctx.strokeStyle = '#4d9bff';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -972,7 +1072,7 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
 
   // Snapshot of the static chart, so the line-chart hover dot can be repainted
   // on top each mousemove without redrawing the whole chart from scratch.
-  const baseSnapshot = style === 'line' ? ctx.getImageData(0, 0, canvas.width, canvas.height) : null;
+  const baseSnapshot = (divActive || style === 'line') ? ctx.getImageData(0, 0, canvas.width, canvas.height) : null;
 
   // Drag-select a range on the chart to zoom in on it for a more precise view.
   let dragStartX = null;
@@ -993,6 +1093,32 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
     const idx = indexForX(x);
     const candle = candles[idx];
     if (!candle || !tooltip) return;
+
+    if (divActive && baseSnapshot) {
+      ctx.putImageData(baseSnapshot, 0, 0);
+      const drawDot = (v, color) => {
+        ctx.beginPath();
+        ctx.arc(xFor(idx), yFor(v), 4, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+      };
+      drawDot(tr.price[idx], '#8b93a7');
+      drawDot(tr.cash[idx], '#f1c40f');
+      if (dividendMode === 'reinvest') drawDot(tr.reinvest[idx], '#2ecc71');
+
+      tooltip.hidden = false;
+      tooltip.style.left = `${Math.min(x + 12, cssWidth - 150)}px`;
+      tooltip.style.top = `${Math.min(y + 12, cssHeight - 64)}px`;
+      tooltip.innerHTML = `
+        <strong>${escapeHtml(candle.t)}</strong>
+        Price $${fmtMoney(tr.price[idx])}<br>
+        + Div cash $${fmtMoney(tr.cash[idx])}${dividendMode === 'reinvest' ? `<br>+ Div reinvested $${fmtMoney(tr.reinvest[idx])}` : ''}
+      `;
+      return;
+    }
 
     if (baseSnapshot) {
       ctx.putImageData(baseSnapshot, 0, 0);
@@ -1061,6 +1187,41 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
   };
 }
 
+// Lazily loads a stock's dividend history (cached per card) so the total-return
+// overlays can be computed. Crypto never pays dividends, so it's skipped.
+async function ensureCardDividends(key, symbol, type) {
+  if (cardDividends.has(key)) return;
+  if (type === 'crypto') {
+    cardDividends.set(key, []);
+    cardPaysDividend.set(key, false);
+    return;
+  }
+  try {
+    const res = await fetchJson(`/api/dividend-history?symbol=${encodeURIComponent(symbol)}&years=5`);
+    const history = (res.history || []).slice().sort((a, b) => a.date.localeCompare(b.date));
+    cardDividends.set(key, history);
+    cardPaysDividend.set(key, history.length > 0);
+  } catch {
+    cardDividends.set(key, []);
+    cardPaysDividend.set(key, false);
+  }
+}
+
+// Enables/greys-out the dividend toggle buttons for a card and keeps the active
+// highlight in sync with the global mode (falling back to Price for tickers
+// that pay nothing, so users never see a confusing 0% total-return line).
+function updateDividendToggle(card, pays) {
+  const toggle = card.querySelector('.dividend-mode-toggle');
+  if (!toggle) return;
+  const effectiveMode = pays ? dividendMode : 'price';
+  toggle.classList.toggle('no-dividend', !pays);
+  toggle.querySelectorAll('.div-mode-btn').forEach((btn) => {
+    const mode = btn.dataset.divMode;
+    btn.disabled = mode !== 'price' && !pays;
+    btn.classList.toggle('active', mode === effectiveMode);
+  });
+}
+
 async function loadChartForCard(card) {
   if (!card) return;
   const { symbol, assetType: type = 'stock' } = card.dataset;
@@ -1071,7 +1232,11 @@ async function loadChartForCard(card) {
   const period = cardPeriod.get(key) || '1mo';
   const apiPath = type === 'crypto' ? '/api/crypto/candles' : '/api/candles';
   try {
-    const res = await fetchJson(`${apiPath}?symbol=${encodeURIComponent(symbol)}&period=${period}`);
+    const [res] = await Promise.all([
+      fetchJson(`${apiPath}?symbol=${encodeURIComponent(symbol)}&period=${period}`),
+      ensureCardDividends(key, symbol, type),
+    ]);
+    updateDividendToggle(card, cardPaysDividend.get(key));
     lastCandles.set(key, res.candles);
     zoomRanges.delete(key); // fresh data (new period) invalidates any prior zoom
     updateZoomResetVisibility(canvas, false);
@@ -1778,6 +1943,24 @@ function handleChartStyleClick(e) {
 dashboardEl.addEventListener('click', handleChartStyleClick);
 cryptoDashboardEl.addEventListener('click', handleChartStyleClick);
 tickerModalBodyEl.addEventListener('click', handleChartStyleClick);
+
+function handleDividendModeClick(e) {
+  const btn = e.target.closest('.div-mode-btn');
+  if (!btn || btn.disabled) return;
+  e.stopPropagation();
+  dividendMode = btn.dataset.divMode;
+  localStorage.setItem(DIVIDEND_MODE_STORAGE_KEY, dividendMode);
+  // App-wide default - update every open card's toggle + chart to match.
+  document.querySelectorAll('.ticker-card').forEach((card) => {
+    const { symbol, assetType: type = 'stock' } = card.dataset;
+    updateDividendToggle(card, cardPaysDividend.get(`${type}:${symbol}`));
+    redrawChartForCard(card);
+  });
+}
+
+dashboardEl.addEventListener('click', handleDividendModeClick);
+cryptoDashboardEl.addEventListener('click', handleDividendModeClick);
+tickerModalBodyEl.addEventListener('click', handleDividendModeClick);
 
 function collapseCard(card) {
   const details = card.querySelector('.ticker-card-details');
