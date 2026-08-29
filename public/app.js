@@ -33,9 +33,9 @@ let chartStyle = localStorage.getItem(CHART_STYLE_STORAGE_KEY) || 'candle';
 if (!CHART_STYLES.some((s) => s.id === chartStyle)) chartStyle = 'candle';
 
 const DIVIDEND_MODE_STORAGE_KEY = 'finapp.dividendMode';
-const DIVIDEND_MODES = ['price', 'cash', 'reinvest'];
-// App-wide default (like chartStyle): 'price' = close only, 'cash' = total
-// return with dividends taken as cash, 'reinvest' = dividends reinvested.
+const DIVIDEND_MODES = ['price', 'dividend'];
+// App-wide default (like chartStyle): 'price' = close only, 'dividend' = total
+// return with dividends reinvested (compounded into more shares at payout).
 let dividendMode = localStorage.getItem(DIVIDEND_MODE_STORAGE_KEY) || 'price';
 if (!DIVIDEND_MODES.includes(dividendMode)) dividendMode = 'price';
 const cardDividends = new Map(); // `${type}:${symbol}` -> sorted [{date, amount}] (empty if none)
@@ -906,9 +906,8 @@ function chartBlockHtml(symbol, assetType = 'stock') {
         </div>
       </div>
       <div class="dividend-mode-toggle" role="group" aria-label="Return view">
-        <button type="button" class="div-mode-btn active" data-div-mode="price">Price only</button>
-        <button type="button" class="div-mode-btn" data-div-mode="cash" disabled title="Total return with dividends taken as cash">+ Dividends (cash)</button>
-        <button type="button" class="div-mode-btn" data-div-mode="reinvest" disabled title="Total return with dividends reinvested">+ Dividends (reinvested)</button>
+        <button type="button" class="div-mode-btn active" data-div-mode="price">Price</button>
+        <button type="button" class="div-mode-btn" data-div-mode="dividend" disabled title="Mark each dividend payment on the price chart">Dividend</button>
       </div>
       <div class="chart-canvas-wrap">
         <canvas class="candle-canvas" data-symbol="${escapeHtml(symbol)}"></canvas>
@@ -941,7 +940,7 @@ function updateZoomResetVisibility(canvas, zoomed) {
 }
 
 // Dividends whose date actually falls inside the visible candle range -
-// shared by computeTotalReturnSeries and the toggle-enable check so both
+// shared by dividendMarkers and the toggle-enable check so both
 // agree on what counts as "this period has a dividend to show".
 function dividendsInWindow(candles, dividends) {
   if (!candles.length || !dividends || !dividends.length) return [];
@@ -950,35 +949,15 @@ function dividendsInWindow(candles, dividends) {
   return dividends.filter((d) => d.date > start && d.date <= end && d.amount > 0);
 }
 
-// Builds price / dividends-as-cash / dividends-reinvested lines aligned to the
-// visible candles. Everything is re-based to 1 share held from the first shown
-// candle, so all three series start at the same value and their divergence over
-// the window is purely the dividend contribution. Reinvestment compounds each
-// payout into more shares at that day's close.
-function computeTotalReturnSeries(candles, dividends) {
-  const price = candles.map((c) => c.c);
-  const n = candles.length;
-  const cash = new Array(n);
-  const reinvest = new Array(n);
-  if (!n) return { price, cash, reinvest };
-
-  const windowDivs = dividendsInWindow(candles, dividends).sort((a, b) => a.date.localeCompare(b.date));
-
-  let divIdx = 0;
-  let cumCash = 0;
-  let shares = 1;
-  for (let i = 0; i < n; i += 1) {
-    const priceHere = candles[i].c;
-    while (divIdx < windowDivs.length && windowDivs[divIdx].date <= candles[i].t) {
-      const amt = windowDivs[divIdx].amount;
-      cumCash += amt;
-      if (priceHere > 0) shares += (shares * amt) / priceHere;
-      divIdx += 1;
-    }
-    cash[i] = priceHere + cumCash;
-    reinvest[i] = shares * priceHere;
-  }
-  return { price, cash, reinvest };
+// Maps each in-window dividend payment to the candle it lands on (or the
+// next one, if the ex-date itself isn't a trading day in this data), so it
+// can be drawn as a marker directly on the price/candle line at that point.
+function dividendMarkers(candles, dividends) {
+  return dividendsInWindow(candles, dividends).map((d) => {
+    let idx = candles.findIndex((c) => c.t >= d.date);
+    if (idx === -1) idx = candles.length - 1;
+    return { idx, amount: d.amount, date: d.date };
+  });
 }
 
 function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
@@ -1001,14 +980,12 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
     return;
   }
 
-  // Dividend overlay: total-return lines instead of raw price. Only active when
-  // a dividend actually landed within the visible window - a quarterly payer
-  // viewed on "1mo"/"5d" usually has none, and drawing an overlay that's
-  // pixel-identical to the price line (with a legend implying otherwise) was
-  // the confusing "nothing happened" bug this replaces.
+  // Dividend overlay: markers on the actual price/candle line showing each
+  // per-share payment. Only active when a dividend actually landed within the
+  // visible window - a quarterly payer viewed on "1mo"/"5d" usually has none.
   const divs = dividendMode !== 'price' && key ? cardDividends.get(key) : null;
-  const divActive = !!(divs && dividendsInWindow(candles, divs).length);
-  const tr = divActive ? computeTotalReturnSeries(candles, divs) : null;
+  const divMarkers = divs ? dividendMarkers(candles, divs) : [];
+  const divActive = divMarkers.length > 0;
 
   // Extra right/bottom padding makes room for the price and date axis labels.
   const padding = { top: 8, bottom: 16, left: 4, right: 44 };
@@ -1017,17 +994,8 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
 
   const highs = candles.map((c) => c.h);
   const lows = candles.map((c) => c.l);
-  let max;
-  let min;
-  if (divActive) {
-    const vals = [...tr.price, ...tr.cash];
-    if (dividendMode === 'reinvest') vals.push(...tr.reinvest);
-    max = Math.max(...vals);
-    min = Math.min(...vals);
-  } else {
-    max = Math.max(...highs);
-    min = Math.min(...lows);
-  }
+  const max = Math.max(...highs);
+  const min = Math.min(...lows);
   const range = max - min || 1;
 
   const n = candles.length;
@@ -1064,42 +1032,7 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
   }
   ctx.textAlign = 'left';
 
-  if (divActive) {
-    const drawSeries = (arr, color, width) => {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width;
-      ctx.beginPath();
-      arr.forEach((v, i) => {
-        const x = xFor(i);
-        const y = yFor(v);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-    };
-
-    drawSeries(tr.price, 'rgba(139, 147, 167, 0.6)', 1.25);
-    if (dividendMode === 'reinvest') {
-      drawSeries(tr.cash, 'rgba(241, 196, 64, 0.85)', 1.25);
-      drawSeries(tr.reinvest, '#2ecc71', 1.75);
-    } else {
-      drawSeries(tr.cash, '#f1c40f', 1.75);
-    }
-
-    // Inline legend so the three lines are distinguishable at a glance.
-    const legend = dividendMode === 'reinvest'
-      ? [['Price', '#8b93a7'], ['+ Div cash', '#f1c40f'], ['+ Div reinvested', '#2ecc71']]
-      : [['Price', '#8b93a7'], ['+ Div cash', '#f1c40f']];
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'left';
-    legend.forEach(([label, color], i) => {
-      const ly = padding.top + 8 + i * 12;
-      ctx.fillStyle = color;
-      ctx.fillRect(padding.left + 2, ly - 7, 8, 8);
-      ctx.fillStyle = '#c9d1e0';
-      ctx.fillText(label, padding.left + 14, ly);
-    });
-  } else if (style === 'line') {
+  if (style === 'line') {
     ctx.strokeStyle = '#4d9bff';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -1138,10 +1071,42 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
     });
   }
 
+  if (divActive) {
+    divMarkers.forEach((m) => {
+      const x = xFor(m.idx);
+      const y = yFor(candles[m.idx].c);
+      ctx.setLineDash([2, 2]);
+      ctx.strokeStyle = 'rgba(46, 204, 113, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x, padding.top + plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.beginPath();
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#2ecc71';
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = '#0b0f17';
+      ctx.stroke();
+    });
+
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.beginPath();
+    ctx.arc(padding.left + 6, padding.top + 6, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#2ecc71';
+    ctx.fill();
+    ctx.fillStyle = '#c9d1e0';
+    ctx.fillText('Dividend payment', padding.left + 14, padding.top + 9);
+  }
+
   const indexForX = (x) => Math.min(n - 1, Math.max(0, Math.floor((x - padding.left) / slot)));
 
-  // Snapshot of the static chart, so the line-chart hover dot can be repainted
-  // on top each mousemove without redrawing the whole chart from scratch.
+  // Snapshot of the static chart (including dividend markers), so hover state
+  // can be repainted on top each mousemove without redrawing from scratch.
   const baseSnapshot = (divActive || style === 'line') ? ctx.getImageData(0, 0, canvas.width, canvas.height) : null;
 
   // Drag-select a range on the chart to zoom in on it for a more precise view.
@@ -1164,53 +1129,34 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
     const candle = candles[idx];
     if (!candle || !tooltip) return;
 
-    if (divActive && baseSnapshot) {
+    if (baseSnapshot) {
       ctx.putImageData(baseSnapshot, 0, 0);
-      const drawDot = (v, color) => {
+      // The floating hover dot only makes sense on the continuous line style -
+      // candles already mark each date, and dividend markers are static.
+      if (style === 'line') {
+        const hx = xFor(idx);
+        const hy = yFor(candle.c);
         ctx.beginPath();
-        ctx.arc(xFor(idx), yFor(v), 4, 0, Math.PI * 2);
-        ctx.fillStyle = color;
+        ctx.arc(hx, hy, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#4d9bff';
         ctx.fill();
         ctx.lineWidth = 1.5;
         ctx.strokeStyle = '#fff';
         ctx.stroke();
-      };
-      drawDot(tr.price[idx], '#8b93a7');
-      drawDot(tr.cash[idx], '#f1c40f');
-      if (dividendMode === 'reinvest') drawDot(tr.reinvest[idx], '#2ecc71');
-
-      tooltip.hidden = false;
-      tooltip.style.left = `${Math.min(x + 12, cssWidth - 150)}px`;
-      tooltip.style.top = `${Math.min(y + 12, cssHeight - 64)}px`;
-      tooltip.innerHTML = `
-        <strong>${escapeHtml(candle.t)}</strong>
-        Price $${fmtMoney(tr.price[idx])}<br>
-        + Div cash $${fmtMoney(tr.cash[idx])}${dividendMode === 'reinvest' ? `<br>+ Div reinvested $${fmtMoney(tr.reinvest[idx])}` : ''}
-      `;
-      return;
+      }
     }
 
-    if (baseSnapshot) {
-      ctx.putImageData(baseSnapshot, 0, 0);
-      const hx = xFor(idx);
-      const hy = yFor(candle.c);
-      ctx.beginPath();
-      ctx.arc(hx, hy, 4.5, 0, Math.PI * 2);
-      ctx.fillStyle = '#4d9bff';
-      ctx.fill();
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = '#fff';
-      ctx.stroke();
-    }
+    const marker = divActive ? divMarkers.find((m) => m.idx === idx) : null;
 
     tooltip.hidden = false;
     // Follows the cursor, offset to its bottom-right, clamped so it stays inside the chart.
-    tooltip.style.left = `${Math.min(x + 12, cssWidth - 130)}px`;
-    tooltip.style.top = `${Math.min(y + 12, cssHeight - 56)}px`;
+    tooltip.style.left = `${Math.min(x + 12, cssWidth - 150)}px`;
+    tooltip.style.top = `${Math.min(y + 12, cssHeight - (marker ? 76 : 56))}px`;
     tooltip.innerHTML = `
       <strong>${escapeHtml(candle.t)}</strong>
       O ${fmtMoney(candle.o)} · H ${fmtMoney(candle.h)}<br>
       L ${fmtMoney(candle.l)} · C ${fmtMoney(candle.c)}
+      ${marker ? `<br><span style="color:#2ecc71">Dividend $${fmtMoney(marker.amount)}/share</span>` : ''}
     `;
   };
 
@@ -1297,9 +1243,7 @@ function updateDividendToggle(card, pays, hasDivsInWindow) {
       ? "This ticker doesn't pay a dividend"
       : !hasDivsInWindow
         ? 'No dividend payments in the selected date range'
-        : mode === 'cash'
-          ? 'Total return with dividends taken as cash'
-          : 'Total return with dividends reinvested';
+        : 'Mark each dividend payment on the price chart';
   });
 }
 
