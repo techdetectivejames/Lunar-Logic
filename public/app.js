@@ -1072,17 +1072,25 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
   }
 
   if (divActive) {
+    // Candlesticks already fill the price area, so a marker following the
+    // close price gets buried in/behind candle bodies - anchor it along the
+    // bottom axis instead. The line style has no such crowding, so its
+    // marker still tracks the price point with a guide line down to the axis.
+    const bottomY = padding.top + plotH - 6;
     divMarkers.forEach((m) => {
       const x = xFor(m.idx);
-      const y = yFor(candles[m.idx].c);
-      ctx.setLineDash([2, 2]);
-      ctx.strokeStyle = 'rgba(46, 204, 113, 0.4)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x, padding.top + plotH);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      const y = style === 'line' ? yFor(candles[m.idx].c) : bottomY;
+
+      if (style === 'line') {
+        ctx.setLineDash([2, 2]);
+        ctx.strokeStyle = 'rgba(46, 204, 113, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, padding.top + plotH);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
       ctx.beginPath();
       ctx.arc(x, y, 3.5, 0, Math.PI * 2);
