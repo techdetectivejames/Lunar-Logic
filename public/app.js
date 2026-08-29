@@ -584,7 +584,7 @@ function drawDividendRocChart(canvas, series) {
   const cssHeight = canvas.clientHeight || 160;
   canvas.width = cssWidth * dpr;
   canvas.height = cssHeight * dpr;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssWidth, cssHeight);
 
@@ -984,7 +984,7 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
   const cssHeight = canvas.clientHeight || 140;
   canvas.width = cssWidth * dpr;
   canvas.height = cssHeight * dpr;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssWidth, cssHeight);
 
