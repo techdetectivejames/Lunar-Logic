@@ -137,7 +137,7 @@ async function finnhubRequest(path, params = {}, ttlMs = 30_000) {
 }
 
 function getQuote(symbol) {
-  return finnhubRequest('/quote', { symbol }, 15_000);
+  return finnhubRequest('/quote', { symbol }, 8_000);
 }
 
 function getProfile(symbol) {

@@ -176,7 +176,7 @@ function getDividendHistory(symbol, years) {
 }
 
 const quoteCache = new Map();
-const QUOTE_TTL_MS = 15_000;
+const QUOTE_TTL_MS = 8_000;
 
 // Backup quote source used when Finnhub is unavailable/rate-limited. Field
 // names are mapped to match Finnhub's { c, d, dp, h, l, o, pc, t } shape so

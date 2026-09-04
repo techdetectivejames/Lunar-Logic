@@ -1834,13 +1834,17 @@ async function loadNewsTab() {
 // --- Live price stream (polling) ---
 // Serverless hosts can't hold a persistent per-client WebSocket, so "live"
 // prices come from polling a batched quote endpoint instead of a pushed feed.
-const LIVE_POLL_MS = 5000;
+// Kept just under the 8s server quote cache TTL so each poll usually returns a
+// freshly refreshed price rather than repeatedly re-fetching a cached one.
+const LIVE_POLL_MS = 4000;
 const liveSubs = { stock: new Set(), crypto: new Set() };
 let livePollTimer = null;
 
 function startLivePolling() {
-  watchlist.forEach((symbol) => streamSubscribe(symbol, 'stock'));
-  cryptoWatchlist.forEach((symbol) => streamSubscribe(symbol, 'crypto'));
+  // Only the always-visible ticker-tape indices subscribe upfront. Watchlist and
+  // crypto cards subscribe themselves once lazy-loaded into view (fillStockCard /
+  // fillCryptoCard), so off-screen cards - whose skeletons have no price element
+  // to update anyway - don't burn quote calls on every poll.
   INDEX_ITEMS.forEach(({ symbol }) => streamSubscribe(symbol, 'stock'));
 
   schedulePoll(0);
