@@ -41,6 +41,42 @@ if (!DIVIDEND_MODES.includes(dividendMode)) dividendMode = 'price';
 const cardDividends = new Map(); // `${type}:${symbol}` -> sorted [{date, amount}] (empty if none)
 const cardPaysDividend = new Map(); // `${type}:${symbol}` -> bool (dividend toggles greyed out when false)
 
+// --- Display currency ---
+// Provider prices are all in USD; these are display-only conversions applied in fmtMoney.
+const CURRENCY_STORAGE_KEY = 'finapp.currency';
+const CURRENCIES = [
+  { code: 'USD', symbol: '$' },
+  { code: 'EUR', symbol: '€' },
+  { code: 'GBP', symbol: '£' },
+  { code: 'JPY', symbol: '¥' },
+  { code: 'CAD', symbol: 'C$' },
+  { code: 'AUD', symbol: 'A$' },
+  { code: 'INR', symbol: '₹' },
+];
+// Used until live rates load, and as a fallback if the rates fetch fails.
+const FALLBACK_RATES = { USD: 1, EUR: 0.92, GBP: 0.79, JPY: 157, CAD: 1.36, AUD: 1.52, INR: 83 };
+const currencyRates = { ...FALLBACK_RATES };
+let currencyCode = localStorage.getItem(CURRENCY_STORAGE_KEY) || 'USD';
+if (!CURRENCIES.some((c) => c.code === currencyCode)) currencyCode = 'USD';
+
+function currentCurrency() {
+  return CURRENCIES.find((c) => c.code === currencyCode) || CURRENCIES[0];
+}
+
+async function loadCurrencyRates() {
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/USD');
+    const data = await res.json();
+    if (data && data.rates) {
+      for (const c of CURRENCIES) {
+        if (typeof data.rates[c.code] === 'number') currencyRates[c.code] = data.rates[c.code];
+      }
+    }
+  } catch {
+    /* keep fallback rates */
+  }
+}
+
 const INDEX_ITEMS = [
   { symbol: 'DIA', label: 'DOW' },
   { symbol: 'SPY', label: 'S&P 500' },
@@ -160,7 +196,10 @@ async function fetchJson(url) {
 
 function fmtMoney(n) {
   if (typeof n !== 'number' || Number.isNaN(n)) return '—';
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const cur = currentCurrency();
+  const converted = n * (currencyRates[cur.code] || 1);
+  const abs = Math.abs(converted).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${converted < 0 ? '-' : ''}${cur.symbol}${abs}`;
 }
 
 function fmtPct(n) {
@@ -373,11 +412,11 @@ function dividendBlockHtml(dividend, currentPrice) {
     <div class="dividend-block">
       <strong>Dividend</strong>
       <div class="dividend-grid">
-        <div>Per Share (Annual)<span>${perShare != null ? `$${fmtMoney(perShare)}` : '—'}</span></div>
+        <div>Per Share (Annual)<span>${perShare != null ? `${fmtMoney(perShare)}` : '—'}</span></div>
         <div>Yield<span>${yieldPct != null ? `${yieldPct.toFixed(2)}%` : '—'}</span></div>
         <div>Pay Frequency<span>${escapeHtml(dividend.frequency || '—')}</span></div>
         <div>Payout Ratio<span>${dividend.payoutRatioPct != null ? `${dividend.payoutRatioPct}%` : '—'}</span></div>
-        <div>Last Paid<span>${escapeHtml(dividend.lastDividendValue != null ? `$${fmtMoney(dividend.lastDividendValue)} · ${dividend.lastDividendDate || ''}` : '—')}</span></div>
+        <div>Last Paid<span>${escapeHtml(dividend.lastDividendValue != null ? `${fmtMoney(dividend.lastDividendValue)} · ${dividend.lastDividendDate || ''}` : '—')}</span></div>
         <div>Ex-Dividend<span>${escapeHtml(dividend.exDividendDate || '—')}</span></div>
       </div>
     </div>
@@ -442,17 +481,17 @@ async function calculateDividend(e) {
     dividendCalcResultEl.innerHTML = `
       <div class="dividend-calc-grid">
         <div>Qty<span>${shares.toLocaleString()}</span></div>
-        <div>Avg. Cost<span>$${fmtMoney(avgCost)}</span></div>
-        <div>Total Invested<span>$${fmtMoney(amountSpent)}</span></div>
-        <div>Current Price<span>${currentPrice != null ? `$${fmtMoney(currentPrice)}` : '—'}</span></div>
-        <div>Current Value<span>${currentValue != null ? `$${fmtMoney(currentValue)}` : '—'}</span></div>
+        <div>Avg. Cost<span>${fmtMoney(avgCost)}</span></div>
+        <div>Total Invested<span>${fmtMoney(amountSpent)}</span></div>
+        <div>Current Price<span>${currentPrice != null ? `${fmtMoney(currentPrice)}` : '—'}</span></div>
+        <div>Current Value<span>${currentValue != null ? `${fmtMoney(currentValue)}` : '—'}</span></div>
         <div>Pay Frequency<span>${escapeHtml(dividend.frequency || '—')}</span></div>
-        <div>Per-Payment Income<span>${perPaymentIncome != null ? `$${fmtMoney(perPaymentIncome)}` : '—'}</span></div>
-        <div>Estimated Annual Income<span>$${fmtMoney(annualIncome)}</span></div>
+        <div>Per-Payment Income<span>${perPaymentIncome != null ? `${fmtMoney(perPaymentIncome)}` : '—'}</span></div>
+        <div>Estimated Annual Income<span>${fmtMoney(annualIncome)}</span></div>
         <div>Yield on Cost<span>${fmtPct(yieldOnCost).replace('+', '')}</span></div>
         <div>Current Yield<span>${currentYield != null ? fmtPct(currentYield).replace('+', '') : '—'}</span></div>
       </div>
-      <p class="muted small">Based on ${escapeHtml(symbol)}'s trailing annual dividend of $${fmtMoney(perShareAnnual)}/share${dividend.exDividendDate ? ` · next ex-dividend date ${escapeHtml(dividend.exDividendDate)}` : ''}. Actual future payouts can change.</p>
+      <p class="muted small">Based on ${escapeHtml(symbol)}'s trailing annual dividend of ${fmtMoney(perShareAnnual)}/share${dividend.exDividendDate ? ` · next ex-dividend date ${escapeHtml(dividend.exDividendDate)}` : ''}. Actual future payouts can change.</p>
       ${quoteResult.error ? `<p class="muted small">Live price temporarily unavailable (${escapeHtml(quoteResult.error.message)}) - current value/yield omitted.</p>` : ''}
     `;
   } catch (err) {
@@ -479,7 +518,7 @@ async function loadDividendPreview() {
     ]);
 
     const currentPrice = quoteResult.error ? null : quoteResult.quote?.c ?? null;
-    const priceText = currentPrice != null ? `\$${fmtMoney(currentPrice)}` : '—';
+    const priceText = currentPrice != null ? `${fmtMoney(currentPrice)}` : '—';
 
     if (!dividend.paysDividend) {
       dividendCalcPreviewEl.innerHTML = `
@@ -496,7 +535,7 @@ async function loadDividendPreview() {
 
     dividendCalcPreviewEl.innerHTML = `
       <em>${escapeHtml(symbol)} last price:</em> <strong>${priceText}</strong><br/>
-      <em>Dividend yield:</em> <strong>${yieldPct != null ? fmtPct(yieldPct).replace('+', '') : '—'}</strong> (\$${fmtMoney(perShareAnnual)} / year)
+      <em>Dividend yield:</em> <strong>${yieldPct != null ? fmtPct(yieldPct).replace('+', '') : '—'}</strong> (${fmtMoney(perShareAnnual)} / year)
     `;
   } catch (err) {
     dividendCalcPreviewEl.innerHTML = `<span class="error-text">Failed to load: ${escapeHtml(err.message)}</span>`;
@@ -535,10 +574,10 @@ async function calculateTotalReturn(e) {
       <div class="total-return-method">
         <strong>Cash Dividends <span class="muted small">(simple - dividends banked, not reinvested)</span></strong>
         <div class="total-return-grid">
-          <div>Start<span>$${fmtMoney(r.startPrice)} <span class="muted small">(${escapeHtml(r.startDate)})</span></span></div>
-          <div>End<span>$${fmtMoney(r.endPrice)} <span class="muted small">(${escapeHtml(r.endDate)})</span></span></div>
+          <div>Start<span>${fmtMoney(r.startPrice)} <span class="muted small">(${escapeHtml(r.startDate)})</span></span></div>
+          <div>End<span>${fmtMoney(r.endPrice)} <span class="muted small">(${escapeHtml(r.endDate)})</span></span></div>
           <div>Price Change<span class="${changeClass(priceChange)}">${fmtMoney(priceChange)} (${fmtPct(priceReturnPct)})</span></div>
-          <div>Dividends Received<span>$${fmtMoney(r.dividendsTotal)}${r.dividendCount ? ` <span class="muted small">(${r.dividendCount} payment${r.dividendCount === 1 ? '' : 's'})</span>` : ''}</span></div>
+          <div>Dividends Received<span>${fmtMoney(r.dividendsTotal)}${r.dividendCount ? ` <span class="muted small">(${r.dividendCount} payment${r.dividendCount === 1 ? '' : 's'})</span>` : ''}</span></div>
           <div>Dividend Return<span>${fmtPct(dividendReturnPct)}</span></div>
           <div>Total Return<span class="${changeClass(r.totalReturnPct)}">${fmtPct(r.totalReturnPct)}</span></div>
         </div>
@@ -548,7 +587,7 @@ async function calculateTotalReturn(e) {
         <div class="total-return-grid">
           <div>Starting Shares<span>1.0000</span></div>
           <div>Ending Shares<span>${r.dripEndingShares.toFixed(4)}</span></div>
-          <div>Ending Value<span>$${fmtMoney(dripEndingValue)}</span></div>
+          <div>Ending Value<span>${fmtMoney(dripEndingValue)}</span></div>
           <div>Total Return<span class="${changeClass(r.dripTotalReturnPct)}">${fmtPct(r.dripTotalReturnPct)}</span></div>
         </div>
       </div>
@@ -728,7 +767,7 @@ function drawDividendRocChart(canvas, series) {
         if (sums.length) {
           const days = Math.max(0, Math.round((tB - tA) / (24 * 60 * 60 * 1000)));
           tooltip.innerHTML = `
-            ${sums.map((s) => `<strong style="color:${s.color}">${escapeHtml(s.symbol)}</strong> \u03a3 $${fmtMoney(s.total)}/share (${s.count} payment${s.count === 1 ? '' : 's'})`).join('<br>')}
+            ${sums.map((s) => `<strong style="color:${s.color}">${escapeHtml(s.symbol)}</strong> \u03a3 ${fmtMoney(s.total)}/share (${s.count} payment${s.count === 1 ? '' : 's'})`).join('<br>')}
             <br><em>${days} day${days === 1 ? '' : 's'} selected</em>
           `;
           tooltip.hidden = false;
@@ -774,7 +813,7 @@ function drawDividendRocChart(canvas, series) {
     if (!hits.length) { tooltip.hidden = true; return; }
 
     tooltip.innerHTML = hits
-      .map((h) => `<strong style="color:${h.color}">${escapeHtml(h.symbol)}</strong> $${fmtMoney(h.point.amount)}/share · ${fmtPct(h.point.pct)} · ${escapeHtml(h.point.date)}`)
+      .map((h) => `<strong style="color:${h.color}">${escapeHtml(h.symbol)}</strong> ${fmtMoney(h.point.amount)}/share · ${fmtPct(h.point.pct)} · ${escapeHtml(h.point.date)}`)
       .join('<br>');
     tooltip.hidden = false;
     // Anchored to the cursor's bottom-right, clamped so it never overflows the chart.
@@ -1032,7 +1071,7 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
     ctx.stroke();
     ctx.fillStyle = '#8b93a7';
     ctx.textAlign = 'left';
-    ctx.fillText(`$${fmtMoney(val)}`, cssWidth - padding.right + 4, y + 3);
+    ctx.fillText(`${fmtMoney(val)}`, cssWidth - padding.right + 4, y + 3);
   }
 
   // Date axis ticks, evenly spaced across whatever range is currently shown.
@@ -1188,7 +1227,7 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
       <strong>${escapeHtml(candle.t)}</strong>
       O ${fmtMoney(candle.o)} · H ${fmtMoney(candle.h)}<br>
       L ${fmtMoney(candle.l)} · C ${fmtMoney(candle.c)}${priceRocHtml}
-      ${marker ? `<br><span style="color:#2ecc71">Dividend $${fmtMoney(marker.amount)}/share</span>${divRocHtml}` : ''}
+      ${marker ? `<br><span style="color:#2ecc71">Dividend ${fmtMoney(marker.amount)}/share</span>${divRocHtml}` : ''}
     `;
   };
 
@@ -1383,8 +1422,8 @@ function predictionsBlockHtml(predictions) {
   const earningsHtml = nextEarnings
     ? `
       <div>Next Earnings<span>${escapeHtml(nextEarnings.date)}${nextEarnings.hour ? ` (${escapeHtml(nextEarnings.hour.toUpperCase())})` : ''}</span></div>
-      <div>EPS Estimate<span>${nextEarnings.epsEstimate != null ? `$${fmtMoney(nextEarnings.epsEstimate)}` : '—'}</span></div>
-      <div>Revenue Estimate<span>${nextEarnings.revenueEstimate != null ? `$${(nextEarnings.revenueEstimate / 1e9).toFixed(2)}B` : '—'}</span></div>
+      <div>EPS Estimate<span>${nextEarnings.epsEstimate != null ? `${fmtMoney(nextEarnings.epsEstimate)}` : '—'}</span></div>
+      <div>Revenue Estimate<span>${nextEarnings.revenueEstimate != null ? `${currentCurrency().symbol}${((nextEarnings.revenueEstimate / 1e9) * (currencyRates[currencyCode] || 1)).toFixed(2)}B` : '—'}</span></div>
     `
     : '<div>Next Earnings<span>No date scheduled</span></div>';
 
@@ -2255,6 +2294,40 @@ if (pullRefreshEl && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
 }
 
 // --- Init ---
+
+// Display currency toggle (footer) - cycles through supported currencies and
+// re-renders visible prices; provider data stays in USD, conversion is display-only.
+const currencyToggleBtn = document.getElementById('currency-toggle');
+const currencyToggleLabelEl = document.getElementById('currency-toggle-label');
+
+function updateCurrencyToggleLabel() {
+  if (currencyToggleLabelEl) {
+    const cur = currentCurrency();
+    currencyToggleLabelEl.textContent = `${cur.code} ${cur.symbol}`;
+  }
+}
+
+function rerenderForCurrency() {
+  renderDashboard();
+  renderCryptoDashboard();
+  renderTickerTape();
+  loadTickerTape();
+}
+
+if (currencyToggleBtn) {
+  currencyToggleBtn.addEventListener('click', () => {
+    const idx = CURRENCIES.findIndex((c) => c.code === currencyCode);
+    currencyCode = CURRENCIES[(idx + 1) % CURRENCIES.length].code;
+    localStorage.setItem(CURRENCY_STORAGE_KEY, currencyCode);
+    updateCurrencyToggleLabel();
+    rerenderForCurrency();
+  });
+}
+
+updateCurrencyToggleLabel();
+loadCurrencyRates().then(() => {
+  if (currencyCode !== 'USD') rerenderForCurrency();
+});
 
 renderStarsField();
 renderWatchlistBar();

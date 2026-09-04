@@ -922,6 +922,29 @@ body.live-connected .live-dot {
   padding: 20px;
 }
 
+.currency-switch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.currency-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.currency-toggle:hover { border-color: var(--accent); color: var(--accent); }
+
 .modal-overlay {
   position: fixed;
   inset: 0;
