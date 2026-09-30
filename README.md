@@ -50,9 +50,3 @@ Visit
 - `server/speculation.js` — Keyword heuristic used to generate the speculation notes.
 - `public/` — Static frontend (vanilla HTML/CSS/JS, no build step).
 
-## Security notes
-
-- The Finnhub API key lives only in `.env` (gitignored) and is never sent to the browser.
-- All ticker/coin input is validated against a strict symbol regex before being used in API calls.
-- All API response text rendered in the DOM is HTML-escaped to prevent XSS from third-party news content.
-
