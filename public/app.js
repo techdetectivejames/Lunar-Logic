@@ -1290,8 +1290,9 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
   let dragStartX = null;
 
   // Paints the hover/scrub dot + tooltip at a canvas-local (x, y). Shared by the
-  // mouse hover and the touch scrubber.
-  function renderHoverAt(x, y) {
+  // mouse hover and the touch scrubber. offsetY lifts the label box above the
+  // point (touch passes a larger value to clear a thumb; mouse passes a small one).
+  function renderHoverAt(x, y, offsetY = 0) {
     const idx = indexForX(x);
     const candle = candles[idx];
     if (!candle || !tooltip) return;
@@ -1326,15 +1327,26 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
     }
 
     tooltip.hidden = false;
-    // Follows the pointer, offset to its bottom-right, clamped so it stays inside the chart.
-    tooltip.style.left = `${Math.min(x + 12, cssWidth - 150)}px`;
-    tooltip.style.top = `${Math.min(y + 12, cssHeight - (marker ? 76 : 56))}px`;
     tooltip.innerHTML = `
       <strong>${escapeHtml(candle.t)}</strong>
       O ${fmtMoney(candle.o)} · H ${fmtMoney(candle.h)}<br>
       L ${fmtMoney(candle.l)} · C ${fmtMoney(candle.c)}${priceRocHtml}
       ${marker ? `<br><span style="color:#2ecc71">Dividend ${fmtMoney(marker.amount)}/share</span>${divRocHtml}` : ''}
     `;
+    // Position after content is set so the box can be measured and kept fully
+    // on-screen. The dot/crosshair stays exactly at (x, y); only this box moves.
+    const EDGE = 8;
+    const boxW = tooltip.offsetWidth || 150;
+    const boxH = tooltip.offsetHeight || 56;
+    // Horizontal: centre over the point, then shift inward so it never clips.
+    let boxLeft = Math.max(EDGE, Math.min(x - boxW / 2, cssWidth - boxW - EDGE));
+    // Vertical: sit above the point by offsetY; if there's no room, flip below
+    // with the same clearance. Final clamp keeps it inside the chart either way.
+    let boxTop = y - offsetY - boxH;
+    if (boxTop < EDGE) boxTop = y + offsetY;
+    boxTop = Math.max(EDGE, Math.min(boxTop, cssHeight - boxH - EDGE));
+    tooltip.style.left = `${boxLeft}px`;
+    tooltip.style.top = `${boxTop}px`;
   }
 
   function hideHover() {
@@ -1355,7 +1367,7 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
       selectionEl.style.width = `${width}px`;
     }
 
-    renderHoverAt(x, y);
+    renderHoverAt(x, y, 14);
   };
 
   canvas.onmousedown = (e) => {
@@ -1433,7 +1445,7 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
     // Locked into scrub mode: block the page and move the dot/label.
     e.preventDefault();
     const rect = canvas.getBoundingClientRect();
-    renderHoverAt(t.clientX - rect.left, t.clientY - rect.top);
+    renderHoverAt(t.clientX - rect.left, t.clientY - rect.top, 56);
   }
 
   function onTouchEnd() {
