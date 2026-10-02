@@ -5,6 +5,29 @@ const DEFAULT_WATCHLIST = ['AAPL', 'TSLA', 'NVDA', 'MSFT'];
 const CRYPTO_STORAGE_KEY = 'finapp.crypto.watchlist';
 const DEFAULT_CRYPTO_WATCHLIST = ['BTC', 'ETH', 'SOL'];
 const MAX_WATCHLIST_SIZE = 12;
+
+// Dashboard layout is serialized as versioned JSON so saved dashboards keep
+// working as new widgets/fields are added later. Bump LAYOUT_VERSION and add a
+// migration step in migrateLayout() whenever the shape changes.
+const LAYOUT_VERSION = 1;
+
+function migrateLayout(raw) {
+  const layout = raw && typeof raw === 'object' ? { ...raw } : {};
+  // (no past versions yet) e.g. if (layout.version < 2) { ...; layout.version = 2; }
+  layout.version = LAYOUT_VERSION;
+  return layout;
+}
+
+// Set while applyLayout() is swapping state in, so the resulting save* calls
+// don't fire 'lunar:layout-changed' and falsely mark the dashboard dirty.
+let applyingLayout = false;
+
+// Lets the account/dashboards module (account.js) show an "unsaved changes"
+// hint when the user edits their watchlists/settings after loading a dashboard.
+function notifyLayoutChanged() {
+  if (applyingLayout) return;
+  window.dispatchEvent(new CustomEvent('lunar:layout-changed'));
+}
 // Lets people type a coin's common name and still resolve to the ticker our
 // data providers (Binance quotes / Yahoo Finance candles) actually recognize.
 const CRYPTO_NAME_ALIASES = {
@@ -166,6 +189,7 @@ function loadWatchlist() {
 
 function saveWatchlist(list) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  notifyLayoutChanged();
 }
 
 let watchlist = loadWatchlist();
@@ -183,6 +207,7 @@ function loadCryptoWatchlist() {
 
 function saveCryptoWatchlist(list) {
   localStorage.setItem(CRYPTO_STORAGE_KEY, JSON.stringify(list));
+  notifyLayoutChanged();
 }
 
 let cryptoWatchlist = loadCryptoWatchlist();
@@ -2027,6 +2052,7 @@ function handleChartStyleClick(e) {
   const idx = CHART_STYLES.findIndex((s) => s.id === chartStyle);
   chartStyle = CHART_STYLES[(idx + 1) % CHART_STYLES.length].id;
   localStorage.setItem(CHART_STYLE_STORAGE_KEY, chartStyle);
+  notifyLayoutChanged();
   const label = CHART_STYLES.find((s) => s.id === chartStyle).label;
   document.querySelectorAll('.chart-style-toggle').forEach((b) => {
     b.textContent = label;
@@ -2050,6 +2076,7 @@ function handleDividendModeClick(e) {
   e.stopPropagation();
   dividendMode = btn.dataset.divMode;
   localStorage.setItem(DIVIDEND_MODE_STORAGE_KEY, dividendMode);
+  notifyLayoutChanged();
   // App-wide default - update every open card's toggle + chart to match.
   document.querySelectorAll('.ticker-card').forEach((card) => {
     const { symbol, assetType: type = 'stock' } = card.dataset;
@@ -2325,6 +2352,7 @@ if (currencyToggleBtn) {
     localStorage.setItem(CURRENCY_STORAGE_KEY, currencyCode);
     updateCurrencyToggleLabel();
     rerenderForCurrency();
+    notifyLayoutChanged();
   });
 }
 
@@ -2354,3 +2382,72 @@ setInterval(() => {
 // News refreshes on a slower cadence than the 30s price loop, and only once the tab has been opened.
 const NEWS_REFRESH_MS = 5 * 60_000;
 setInterval(() => { if (newsTabLoaded) loadNewsTab(); }, NEWS_REFRESH_MS);
+
+// --- Dashboard layout API (consumed by account.js for save/load) ---
+
+// Snapshot of everything that makes up a dashboard "layout", as versioned JSON.
+function getCurrentLayout() {
+  return {
+    version: LAYOUT_VERSION,
+    watchlist: [...watchlist],
+    cryptoWatchlist: [...cryptoWatchlist],
+    chartStyle,
+    dividendMode,
+    currency: currencyCode,
+  };
+}
+
+// Replace the live state from a (possibly older) saved layout and re-render.
+// Validates each field so a malformed/partial blob can't corrupt the UI.
+function applyLayout(rawLayout) {
+  const layout = migrateLayout(rawLayout);
+  applyingLayout = true;
+  try {
+    if (Array.isArray(layout.watchlist)) {
+      watchlist = layout.watchlist
+        .filter((s) => typeof s === 'string')
+        .map((s) => s.toUpperCase())
+        .slice(0, MAX_WATCHLIST_SIZE);
+      saveWatchlist(watchlist);
+    }
+    if (Array.isArray(layout.cryptoWatchlist)) {
+      cryptoWatchlist = layout.cryptoWatchlist
+        .filter((s) => typeof s === 'string')
+        .map((s) => s.toUpperCase())
+        .slice(0, MAX_WATCHLIST_SIZE);
+      saveCryptoWatchlist(cryptoWatchlist);
+    }
+    if (CHART_STYLES.some((s) => s.id === layout.chartStyle)) {
+      chartStyle = layout.chartStyle;
+      localStorage.setItem(CHART_STYLE_STORAGE_KEY, chartStyle);
+      const label = CHART_STYLES.find((s) => s.id === chartStyle).label;
+      document.querySelectorAll('.chart-style-toggle').forEach((b) => { b.textContent = label; });
+    }
+    if (DIVIDEND_MODES.includes(layout.dividendMode)) {
+      dividendMode = layout.dividendMode;
+      localStorage.setItem(DIVIDEND_MODE_STORAGE_KEY, dividendMode);
+    }
+    if (CURRENCIES.some((c) => c.code === layout.currency)) {
+      currencyCode = layout.currency;
+      localStorage.setItem(CURRENCY_STORAGE_KEY, currencyCode);
+      updateCurrencyToggleLabel();
+    }
+  } finally {
+    applyingLayout = false;
+  }
+
+  renderWatchlistBar();
+  renderDashboard();
+  renderCryptoWatchlistBar();
+  renderCryptoDashboard();
+  renderTickerTape();
+  loadTickerTape();
+}
+
+// Exposed for the (ES module) account.js, which can't share this classic
+// script's module-scoped closures any other way.
+window.LunarDashboard = {
+  LAYOUT_VERSION,
+  getLayout: getCurrentLayout,
+  applyLayout,
+};

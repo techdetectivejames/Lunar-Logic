@@ -19,6 +19,12 @@
     <div class="brand">
       <img src="/assets/logo.png" alt="Lunar Logic" class="brand-logo" />
     </div>
+    <div class="topbar-actions">
+      <span class="dashboard-name" id="dashboard-name" hidden></span>
+      <button type="button" id="save-dashboard-btn" class="topbar-btn" title="Save dashboard">Save</button>
+      <button type="button" id="dashboards-btn" class="topbar-btn" hidden>Dashboards</button>
+      <button type="button" id="account-btn" class="topbar-btn">Sign in</button>
+    </div>
   </header>
 
   <div class="ticker-tape" id="ticker-tape" aria-label="Market indices">
@@ -178,6 +184,49 @@
     </div>
   </div>
 
+  <!-- Sign in / create account (email + Google) -->
+  <div class="modal-overlay" id="auth-modal-overlay" hidden>
+    <div class="modal auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+      <button type="button" class="modal-close" id="auth-modal-close" aria-label="Close">×</button>
+      <h2 id="auth-modal-title">Sign in</h2>
+      <p class="muted small" id="auth-subtitle">Sign in to save and sync your dashboards.</p>
+      <p class="auth-message" id="auth-message" role="alert" hidden></p>
+      <button type="button" class="google-btn" id="google-signin">
+        <span class="google-g" aria-hidden="true">G</span> Continue with Google
+      </button>
+      <div class="auth-divider"><span>or</span></div>
+      <form id="auth-form" autocomplete="on">
+        <label for="auth-email">Email</label>
+        <input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" required />
+        <label for="auth-password">Password</label>
+        <input id="auth-password" type="password" autocomplete="current-password" placeholder="••••••••" minlength="6" required />
+        <button type="submit" id="auth-submit">Sign in</button>
+      </form>
+      <p class="auth-switch small">
+        <span id="auth-switch-text">Don't have an account?</span>
+        <button type="button" class="link-btn" id="auth-switch-btn">Create one</button>
+      </p>
+      <p class="auth-magic small">
+        <button type="button" class="link-btn" id="auth-magic-btn">Email me a magic link instead</button>
+      </p>
+    </div>
+  </div>
+
+  <!-- Saved dashboards: save / load / duplicate / delete -->
+  <div class="modal-overlay" id="dashboards-modal-overlay" hidden>
+    <div class="modal dashboards-modal" role="dialog" aria-modal="true" aria-labelledby="dashboards-modal-title">
+      <button type="button" class="modal-close" id="dashboards-modal-close" aria-label="Close">×</button>
+      <h2 id="dashboards-modal-title">My Dashboards</h2>
+      <div class="dashboards-toolbar">
+        <input id="new-dashboard-name" type="text" placeholder="New dashboard name" maxlength="60" />
+        <button type="button" id="save-current-btn">Save current as new</button>
+      </div>
+      <p class="dashboards-message muted small" id="dashboards-message" hidden></p>
+      <ul class="dashboards-list" id="dashboards-list"></ul>
+    </div>
+  </div>
+
   <script src="/app.js"></script>
+  <script type="module" src="/account.js"></script>
 </body>
 </html>
