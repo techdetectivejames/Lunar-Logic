@@ -537,7 +537,9 @@ body.live-connected .live-dot {
 .div-mode-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .chart-canvas-wrap { position: relative; }
-.candle-canvas { width: 100%; height: 160px; display: block; cursor: crosshair; }
+/* pan-y lets the page scroll vertically until the touch scrubber locks into a
+   horizontal gesture and calls preventDefault() (see drawCandles). */
+.candle-canvas { width: 100%; height: 160px; display: block; cursor: crosshair; touch-action: pan-y; }
 .chart-zoom-selection {
   position: absolute;
   top: 0;

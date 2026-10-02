@@ -1289,19 +1289,9 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
   // Drag-select a range on the chart to zoom in on it for a more precise view.
   let dragStartX = null;
 
-  canvas.onmousemove = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    if (dragStartX != null && selectionEl) {
-      const left = Math.min(dragStartX, x);
-      const width = Math.abs(x - dragStartX);
-      selectionEl.hidden = false;
-      selectionEl.style.left = `${left}px`;
-      selectionEl.style.width = `${width}px`;
-    }
-
+  // Paints the hover/scrub dot + tooltip at a canvas-local (x, y). Shared by the
+  // mouse hover and the touch scrubber.
+  function renderHoverAt(x, y) {
     const idx = indexForX(x);
     const candle = candles[idx];
     if (!candle || !tooltip) return;
@@ -1336,7 +1326,7 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
     }
 
     tooltip.hidden = false;
-    // Follows the cursor, offset to its bottom-right, clamped so it stays inside the chart.
+    // Follows the pointer, offset to its bottom-right, clamped so it stays inside the chart.
     tooltip.style.left = `${Math.min(x + 12, cssWidth - 150)}px`;
     tooltip.style.top = `${Math.min(y + 12, cssHeight - (marker ? 76 : 56))}px`;
     tooltip.innerHTML = `
@@ -1345,6 +1335,27 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
       L ${fmtMoney(candle.l)} · C ${fmtMoney(candle.c)}${priceRocHtml}
       ${marker ? `<br><span style="color:#2ecc71">Dividend ${fmtMoney(marker.amount)}/share</span>${divRocHtml}` : ''}
     `;
+  }
+
+  function hideHover() {
+    if (tooltip) tooltip.hidden = true;
+    if (baseSnapshot) ctx.putImageData(baseSnapshot, 0, 0);
+  }
+
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (dragStartX != null && selectionEl) {
+      const left = Math.min(dragStartX, x);
+      const width = Math.abs(x - dragStartX);
+      selectionEl.hidden = false;
+      selectionEl.style.left = `${left}px`;
+      selectionEl.style.width = `${width}px`;
+    }
+
+    renderHoverAt(x, y);
   };
 
   canvas.onmousedown = (e) => {
@@ -1385,9 +1396,66 @@ function drawCandles(canvas, candles, { style = chartStyle, key = null } = {}) {
   canvas.onmouseleave = () => {
     dragStartX = null;
     if (selectionEl) selectionEl.hidden = true;
-    if (tooltip) tooltip.hidden = true;
-    if (baseSnapshot) ctx.putImageData(baseSnapshot, 0, 0);
+    hideHover();
   };
+
+  // --- Touch scrubber with direction lock ---
+  // touch-action: pan-y (set in CSS) lets the browser own vertical scrolling
+  // until we decide the gesture is horizontal. We stay undecided on touchstart,
+  // then on the first meaningful movement compare horizontal vs vertical travel:
+  // horizontal -> lock to scrub (preventDefault each move); vertical -> let the
+  // page scroll and never re-evaluate for the rest of this touch.
+  let touchLock = null; // null = undecided, 'scrub', or 'scroll'
+  let touchStartX = 0;
+  let touchStartY = 0;
+  const LOCK_THRESHOLD = 9;
+
+  function onTouchStart(e) {
+    if (e.touches.length !== 1) { touchLock = 'scroll'; return; }
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchLock = null; // record only - take no action yet
+  }
+
+  function onTouchMove(e) {
+    if (touchLock === 'scroll') return;
+    const t = e.touches[0];
+    if (!t) return;
+    const dx = t.clientX - touchStartX;
+    const dy = t.clientY - touchStartY;
+
+    if (touchLock === null) {
+      if (Math.abs(dx) < LOCK_THRESHOLD && Math.abs(dy) < LOCK_THRESHOLD) return; // below threshold - keep waiting
+      touchLock = Math.abs(dx) > Math.abs(dy) ? 'scrub' : 'scroll';
+      if (touchLock === 'scroll') return; // vertical intent - let the page scroll
+    }
+
+    // Locked into scrub mode: block the page and move the dot/label.
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    renderHoverAt(t.clientX - rect.left, t.clientY - rect.top);
+  }
+
+  function onTouchEnd() {
+    touchLock = null;
+    hideHover();
+  }
+
+  // Re-bind cleanly on every redraw (fresh candles/scales) without stacking
+  // listeners. touchmove must be non-passive so preventDefault() can fire.
+  if (canvas._scrubStart) {
+    canvas.removeEventListener('touchstart', canvas._scrubStart);
+    canvas.removeEventListener('touchmove', canvas._scrubMove);
+    canvas.removeEventListener('touchend', canvas._scrubEnd);
+    canvas.removeEventListener('touchcancel', canvas._scrubEnd);
+  }
+  canvas._scrubStart = onTouchStart;
+  canvas._scrubMove = onTouchMove;
+  canvas._scrubEnd = onTouchEnd;
+  canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+  canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+  canvas.addEventListener('touchend', onTouchEnd);
+  canvas.addEventListener('touchcancel', onTouchEnd);
 }
 
 // Lazily loads a stock's dividend history (cached per card) so the total-return
