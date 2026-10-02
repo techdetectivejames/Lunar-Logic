@@ -14,14 +14,17 @@ const FEATURES = {
   quotes:                  { tier: 'public',  category: 'core',   label: 'Live prices' },
   search:                  { tier: 'public',  category: 'core',   label: 'Symbol search' },
 
-  'charts.candles':        { tier: 'free',    category: 'charts', label: 'Price charts' },
-  'data.dividend':         { tier: 'free',    category: 'charts', label: 'Dividend info' },
+  // Charts + the info shown alongside them are open to everyone (guests too).
+  'charts.candles':        { tier: 'public',  category: 'charts', label: 'Price charts' },
+  'data.dividend':         { tier: 'public',  category: 'charts', label: 'Dividend info' },
+  'charts.predictions':    { tier: 'public',  category: 'charts', label: 'Analyst predictions' },
+
+  // News + congressional trades + tools require an account (premium where noted).
   'news.ticker':           { tier: 'free',    category: 'news',   label: 'Per-ticker news' },
   'news.crypto':           { tier: 'free',    category: 'news',   label: 'Crypto news' },
   'tools.dividendCalc':    { tier: 'free',    category: 'tools',  label: 'Dividend calculator' },
 
   'news.market':           { tier: 'premium', category: 'news',   label: 'Market news feed' },
-  'charts.predictions':    { tier: 'premium', category: 'charts', label: 'Analyst predictions' },
   'data.congress':         { tier: 'premium', category: 'charts', label: 'Congressional trades' },
   'tools.totalReturn':     { tier: 'premium', category: 'tools',  label: 'Total return calculator' },
   'tools.dividendHistory': { tier: 'premium', category: 'tools',  label: 'Dividend history chart' },

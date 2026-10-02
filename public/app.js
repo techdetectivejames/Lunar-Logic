@@ -1639,19 +1639,15 @@ async function fillStockCard(card, symbol, { showNews = true, collapsed = false 
 async function loadStockCardDetails(card, symbol, { showNews = false } = {}) {
   const details = card.querySelector('.ticker-card-details');
   if (!details) return;
-  // Charts + dividend/predictions/news/congress are account-only.
-  if (!isUnlocked()) {
-    details.innerHTML = gatePromptHtml();
-    card.dataset.detailsLoaded = 'true';
-    return;
-  }
   try {
-    const canPredict = canAccess('charts.predictions');
+    // Charts, dividend info and predictions are open to everyone. Per-ticker
+    // news and congressional trades require an account (congress is Premium).
+    const canNews = canAccess('news.ticker');
     const canCongress = canAccess('data.congress');
     const [newsRes, dividendRes, predictionsRes, congressRes] = await Promise.all([
-      showNews ? fetchJson(`/api/news?symbol=${encodeURIComponent(symbol)}`).catch(() => ({ items: [] })) : Promise.resolve({ items: [] }),
+      (showNews && canNews) ? fetchJson(`/api/news?symbol=${encodeURIComponent(symbol)}`).catch(() => ({ items: [] })) : Promise.resolve({ items: [] }),
       fetchJson(`/api/dividend?symbol=${encodeURIComponent(symbol)}`).catch(() => ({ paysDividend: false })),
-      canPredict ? fetchJson(`/api/predictions?symbol=${encodeURIComponent(symbol)}`).catch(() => null) : Promise.resolve(null),
+      fetchJson(`/api/predictions?symbol=${encodeURIComponent(symbol)}`).catch(() => null),
       canCongress ? fetchJson(`/api/congress?symbol=${encodeURIComponent(symbol)}&days=365`).catch(() => ({ trades: [] })) : Promise.resolve({ trades: [] }),
     ]);
 
@@ -1660,24 +1656,23 @@ async function loadStockCardDetails(card, symbol, { showNews = false } = {}) {
       : '<p class="muted">No recent news found.</p>';
 
     const dividendHtml = dividendBlockHtml(dividendRes, parseFloat(card.dataset.lastPrice) || null);
-    // Analyst predictions + congressional trades are Premium — show an upgrade
-    // prompt in their place for free users instead of the real block.
-    const predictionsHtml = canPredict
-      ? predictionsBlockHtml(predictionsRes)
-      : upgradePromptHtml('Analyst predictions are a Premium feature.');
+    const predictionsHtml = predictionsBlockHtml(predictionsRes);
+    // Congressional trades require an account/Premium — show a prompt otherwise.
     const congressHtml = canCongress
       ? congressCardBlockHtml(congressRes.trades || [])
-      : upgradePromptHtml('Congressional trades are a Premium feature.');
+      : (isUnlocked()
+          ? upgradePromptHtml('Congressional trades are a Premium feature.')
+          : gatePromptHtml('Sign in to view congressional trades.'));
+    // Per-ticker news requires an account.
+    const newsBlockHtml = !showNews ? '' : canNews
+      ? `<div class="news-list"><strong>Stock News &amp; Speculation</strong>${newsHtml}</div>`
+      : gatePromptHtml('Sign in to read stock news.');
 
     details.innerHTML = `
       ${chartBlockHtml(symbol, 'stock')}
       ${dividendHtml}
       ${predictionsHtml}
-      ${showNews ? `
-      <div class="news-list">
-        <strong>Stock News &amp; Speculation</strong>
-        ${newsHtml}
-      </div>` : ''}
+      ${newsBlockHtml}
       ${congressHtml}
     `;
     card.dataset.detailsLoaded = 'true';
@@ -1751,10 +1746,10 @@ function cryptoCardSkeleton(symbol) {
 
 async function fillCryptoCard(card, symbol, { showNews = true, collapsed = false } = {}) {
   try {
-    const locked = !isUnlocked();
+    const canNews = canAccess('news.crypto');
     const [quoteRes, newsRes] = await Promise.all([
       fetchJson(`/api/crypto/quote?symbol=${encodeURIComponent(symbol)}`),
-      (showNews && !locked) ? fetchJson(`/api/crypto/news?symbol=${encodeURIComponent(symbol)}`).catch(() => ({ items: [] })) : Promise.resolve({ items: [] }),
+      (showNews && canNews) ? fetchJson(`/api/crypto/news?symbol=${encodeURIComponent(symbol)}`).catch(() => ({ items: [] })) : Promise.resolve({ items: [] }),
     ]);
 
     const q = quoteRes.quote || {};
@@ -1765,17 +1760,14 @@ async function fillCryptoCard(card, symbol, { showNews = true, collapsed = false
       ? newsRes.items.map(newsItemHtml).join('')
       : '<p class="muted">No recent news found.</p>';
 
-    // Charts + news are account-only; guests still see the price summary above.
-    const detailsInner = locked
-      ? gatePromptHtml()
-      : `
-        ${chartBlockHtml(symbol, 'crypto')}
-        ${showNews ? `
-        <div class="news-list">
-          <strong>Crypto News &amp; Speculation</strong>
-          ${newsHtml}
-        </div>` : ''}
-      `;
+    // Chart is open to everyone; crypto news requires an account.
+    const newsBlockHtml = !showNews ? '' : canNews
+      ? `<div class="news-list"><strong>Crypto News &amp; Speculation</strong>${newsHtml}</div>`
+      : gatePromptHtml('Sign in to read crypto news.');
+    const detailsInner = `
+      ${chartBlockHtml(symbol, 'crypto')}
+      ${newsBlockHtml}
+    `;
 
     card.classList.toggle('collapsible', collapsed);
     card.innerHTML = `
@@ -1802,7 +1794,7 @@ async function fillCryptoCard(card, symbol, { showNews = true, collapsed = false
     `;
     card.dataset.prevClose = q.pc ?? q.c ?? 0;
     card.dataset.lastPrice = q.c ?? 0;
-    if (!collapsed && !locked) loadChartForCard(card);
+    if (!collapsed) loadChartForCard(card);
     streamSubscribe(symbol, 'crypto');
   } catch (err) {
     card.innerHTML = `
@@ -2227,8 +2219,6 @@ function expandCard(card) {
     loadStockCardDetails(card, symbol, { showNews: false });
     return;
   }
-  // Gated (signed-out) cards show a sign-in prompt instead of a chart canvas.
-  if (!isUnlocked()) return;
   // chart canvas has zero size while [hidden], so it needs a redraw once visible
   if (lastCandles.has(`${assetType}:${symbol}`)) redrawChartForCard(card);
   else loadChartForCard(card);
