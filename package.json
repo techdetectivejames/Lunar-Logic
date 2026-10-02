@@ -20,6 +20,7 @@
   "dependencies": {
     "@capacitor/app": "^6.0.3",
     "@capacitor/core": "^6.2.2",
+    "@capacitor/haptics": "^6.0.3",
     "@capacitor/push-notifications": "^6.0.5",
     "@revenuecat/purchases-capacitor": "^9.2.2",
     "@supabase/supabase-js": "^2.109.0",

@@ -1572,13 +1572,16 @@ function predictionsBlockHtml(predictions) {
 function cardSkeleton(symbol) {
   return `
     <article class="ticker-card" data-symbol="${escapeHtml(symbol)}" data-asset-type="stock">
-      <div class="ticker-card-head">
-        <div>
-          <div class="ticker-symbol">${escapeHtml(symbol)}</div>
-          <div class="ticker-name muted">Loading…</div>
+      <div class="card-skeleton" aria-busy="true" aria-label="Loading ${escapeHtml(symbol)}">
+        <div class="sk-row">
+          <div><div class="skeleton sk-line sk-sym"></div><div class="skeleton sk-line sk-name"></div></div>
+          <div style="text-align:right"><div class="skeleton sk-line sk-price"></div><div class="skeleton sk-line sk-chg"></div></div>
+        </div>
+        <div class="sk-grid">
+          <div class="skeleton sk-cell"></div><div class="skeleton sk-cell"></div><div class="skeleton sk-cell"></div>
+          <div class="skeleton sk-cell"></div><div class="skeleton sk-cell"></div><div class="skeleton sk-cell"></div>
         </div>
       </div>
-      <div class="spinner">Loading quote…</div>
     </article>
   `;
 }
@@ -1734,13 +1737,16 @@ function renderDashboard() {
 function cryptoCardSkeleton(symbol) {
   return `
     <article class="ticker-card" data-symbol="${escapeHtml(symbol)}" data-asset-type="crypto">
-      <div class="ticker-card-head">
-        <div>
-          <div class="ticker-symbol">${escapeHtml(symbol)}</div>
-          <div class="ticker-name muted">Loading…</div>
+      <div class="card-skeleton" aria-busy="true" aria-label="Loading ${escapeHtml(symbol)}">
+        <div class="sk-row">
+          <div><div class="skeleton sk-line sk-sym"></div><div class="skeleton sk-line sk-name"></div></div>
+          <div style="text-align:right"><div class="skeleton sk-line sk-price"></div><div class="skeleton sk-line sk-chg"></div></div>
+        </div>
+        <div class="sk-grid">
+          <div class="skeleton sk-cell"></div><div class="skeleton sk-cell"></div>
+          <div class="skeleton sk-cell"></div><div class="skeleton sk-cell"></div>
         </div>
       </div>
-      <div class="spinner">Loading quote…</div>
     </article>
   `;
 }
@@ -1834,13 +1840,16 @@ function openTickerDetail(symbol, assetType) {
   tickerModalBodyEl.dataset.symbol = symbol;
   tickerModalBodyEl.dataset.assetType = assetType;
   tickerModalBodyEl.innerHTML = `
-    <div class="ticker-card-head">
-      <div>
-        <div class="ticker-symbol">${escapeHtml(symbol)}</div>
-        <div class="ticker-name muted">Loading…</div>
+    <div class="card-skeleton" aria-busy="true" aria-label="Loading ${escapeHtml(symbol)}">
+      <div class="sk-row">
+        <div><div class="skeleton sk-line sk-sym"></div><div class="skeleton sk-line sk-name"></div></div>
+        <div style="text-align:right"><div class="skeleton sk-line sk-price"></div><div class="skeleton sk-line sk-chg"></div></div>
       </div>
+      <div class="sk-grid">
+        <div class="skeleton sk-cell"></div><div class="skeleton sk-cell"></div><div class="skeleton sk-cell"></div>
+      </div>
+      <div class="skeleton" style="height:160px;border-radius:10px;margin-top:12px"></div>
     </div>
-    <div class="spinner">Loading quote & news…</div>
   `;
   tickerModalOverlayEl.hidden = false;
   document.body.classList.add('modal-open');
@@ -2484,11 +2493,13 @@ if (pullRefreshEl && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
     pullRefreshEl.classList.remove('dragging');
     if (wasReady) {
       refreshing = true;
+      window.LunarHaptics?.impact?.('MEDIUM');
       pullRefreshEl.classList.add('refreshing');
       pullTextEl.textContent = 'Refreshing…';
       pullRefreshEl.style.transform = 'translateY(0)';
       Promise.resolve(refreshActiveTab()).finally(() => {
         refreshing = false;
+        window.LunarHaptics?.success?.();
         pullRefreshEl.classList.remove('refreshing');
         resetPull();
       });

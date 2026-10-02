@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0e14" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#f4f6fb" media="(prefers-color-scheme: light)" />
 <title>Lunar Logic — Live Ticker Dashboard</title>
 <link rel="icon" type="image/png" href="/assets/logo.png" />
 <link rel="shortcut icon" type="image/png" href="/assets/logo.png" />
@@ -32,13 +34,6 @@
   </div>
 
   <main>
-    <nav class="tab-nav" role="tablist" aria-label="Sections">
-      <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-tab="stocks">Stocks</button>
-      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="crypto">Crypto</button>
-      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="news">News</button>
-      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tools">Tools</button>
-    </nav>
-
     <section class="tab-panel active" id="tab-stocks" role="tabpanel">
       <section class="section-heading">
         <h2>Stocks</h2>
@@ -177,58 +172,88 @@
     Data via <a href="https://finnhub.io/" target="_blank" rel="noopener noreferrer">Finnhub.io</a>, <a href="https://housestockwatcher.com/" target="_blank" rel="noopener">House Stock Watcher</a> and <a href="https://www.bargo.ai/" target="_blank" rel="noopener">Bargo</a>. Speculation notes are a local keyword heuristic, not financial advice.
   </footer>
 
-  <div class="modal-overlay" id="ticker-modal-overlay" hidden>
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Ticker details">
+  <nav class="bottom-tab-bar" role="tablist" aria-label="Sections">
+    <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-tab="stocks">
+      <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5m0 14h16M8 16l3-4 3 2 4-6"/></svg>
+      <span class="tab-label">Stocks</span>
+    </button>
+    <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="crypto">
+      <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M9.5 9h3.2a1.8 1.8 0 010 3.5H9.5m0 0h3.6a1.8 1.8 0 010 3.5H9.5m0-7V8m0 8v1m2-9V7m0 10v-1"/></svg>
+      <span class="tab-label">Crypto</span>
+    </button>
+    <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="news">
+      <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h13v14H5a1 1 0 01-1-1V5zm13 0h2a1 1 0 011 1v11a2 2 0 01-2 2M7 9h7M7 12h7M7 15h4"/></svg>
+      <span class="tab-label">News</span>
+    </button>
+    <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tools">
+      <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 005.4-5.4l-2.6 2.6-2.1-.5-.5-2.1 2.6-2.6z"/></svg>
+      <span class="tab-label">Tools</span>
+    </button>
+  </nav>
+
+  <div class="modal-overlay sheet-overlay" id="ticker-modal-overlay" hidden>
+    <div class="modal sheet" role="dialog" aria-modal="true" aria-label="Ticker details">
+      <div class="sheet-handle" aria-hidden="true"></div>
       <button type="button" class="modal-close" id="ticker-modal-close" aria-label="Close">×</button>
-      <div class="ticker-card modal-ticker-card" id="ticker-modal-body"></div>
+      <div class="sheet-scroll">
+        <div class="ticker-card modal-ticker-card" id="ticker-modal-body"></div>
+      </div>
     </div>
   </div>
 
   <!-- Sign in / create account (email + Google) -->
-  <div class="modal-overlay" id="auth-modal-overlay" hidden>
-    <div class="modal auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+  <div class="modal-overlay sheet-overlay" id="auth-modal-overlay" hidden>
+    <div class="modal auth-modal sheet" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
       <button type="button" class="modal-close" id="auth-modal-close" aria-label="Close">×</button>
-      <h2 id="auth-modal-title">Sign in</h2>
-      <p class="muted small" id="auth-subtitle">Sign in to save and sync your dashboards.</p>
-      <p class="auth-message" id="auth-message" role="alert" hidden></p>
-      <button type="button" class="google-btn" id="google-signin">
-        <span class="google-g" aria-hidden="true">G</span> Continue with Google
-      </button>
-      <div class="auth-divider"><span>or</span></div>
-      <form id="auth-form" autocomplete="on">
-        <label for="auth-email">Email</label>
-        <input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" required />
-        <label for="auth-password">Password</label>
-        <input id="auth-password" type="password" autocomplete="current-password" placeholder="••••••••" minlength="6" required />
-        <button type="submit" id="auth-submit">Sign in</button>
-      </form>
-      <p class="auth-switch small">
-        <span id="auth-switch-text">Don't have an account?</span>
-        <button type="button" class="link-btn" id="auth-switch-btn">Create one</button>
-      </p>
-      <p class="auth-magic small">
-        <button type="button" class="link-btn" id="auth-magic-btn">Email me a magic link instead</button>
-      </p>
+      <div class="sheet-scroll">
+        <h2 id="auth-modal-title">Sign in</h2>
+        <p class="muted small" id="auth-subtitle">Sign in to save and sync your dashboards.</p>
+        <p class="auth-message" id="auth-message" role="alert" hidden></p>
+        <button type="button" class="google-btn" id="google-signin">
+          <span class="google-g" aria-hidden="true">G</span> Continue with Google
+        </button>
+        <div class="auth-divider"><span>or</span></div>
+        <form id="auth-form" autocomplete="on">
+          <label for="auth-email">Email</label>
+          <input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" required />
+          <label for="auth-password">Password</label>
+          <input id="auth-password" type="password" autocomplete="current-password" placeholder="••••••••" minlength="6" required />
+          <button type="submit" id="auth-submit">Sign in</button>
+        </form>
+        <p class="auth-switch small">
+          <span id="auth-switch-text">Don't have an account?</span>
+          <button type="button" class="link-btn" id="auth-switch-btn">Create one</button>
+        </p>
+        <p class="auth-magic small">
+          <button type="button" class="link-btn" id="auth-magic-btn">Email me a magic link instead</button>
+        </p>
+      </div>
     </div>
   </div>
 
   <!-- Saved dashboards: save / load / duplicate / delete -->
-  <div class="modal-overlay" id="dashboards-modal-overlay" hidden>
-    <div class="modal dashboards-modal" role="dialog" aria-modal="true" aria-labelledby="dashboards-modal-title">
+  <div class="modal-overlay sheet-overlay" id="dashboards-modal-overlay" hidden>
+    <div class="modal dashboards-modal sheet" role="dialog" aria-modal="true" aria-labelledby="dashboards-modal-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
       <button type="button" class="modal-close" id="dashboards-modal-close" aria-label="Close">×</button>
-      <h2 id="dashboards-modal-title">My Dashboards</h2>
-      <div class="dashboards-toolbar">
-        <input id="new-dashboard-name" type="text" placeholder="New dashboard name" maxlength="60" />
-        <button type="button" id="save-current-btn">Save current as new</button>
+      <div class="sheet-scroll">
+        <h2 id="dashboards-modal-title">My Dashboards</h2>
+        <div class="dashboards-toolbar">
+          <input id="new-dashboard-name" type="text" placeholder="New dashboard name" maxlength="60" />
+          <button type="button" id="save-current-btn">Save current as new</button>
+        </div>
+        <p class="dashboards-message muted small" id="dashboards-message" hidden></p>
+        <ul class="dashboards-list" id="dashboards-list"></ul>
       </div>
-      <p class="dashboards-message muted small" id="dashboards-message" hidden></p>
-      <ul class="dashboards-list" id="dashboards-list"></ul>
     </div>
   </div>
 
   <script src="/env.js"></script>
+  <script src="/haptics.js"></script>
   <script src="/app.js"></script>
   <script type="module" src="/account.js"></script>
   <script src="/native.js"></script>
+  <script src="/sheet.js"></script>
 </body>
 </html>

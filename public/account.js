@@ -172,6 +172,7 @@ function toast(text, kind = 'info') {
   el.textContent = text;
   el.dataset.kind = kind;
   el.classList.add('visible');
+  if (window.LunarHaptics) (kind === 'error' ? window.LunarHaptics.error() : window.LunarHaptics.success());
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('visible'), 3200);
 }
