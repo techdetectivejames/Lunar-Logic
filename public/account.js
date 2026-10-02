@@ -52,6 +52,22 @@ function escapeHtml(str) {
   }[c]));
 }
 
+// Published so app.js can gate charts/details behind sign-in and open the auth
+// modal from its "Sign in" prompts. Dispatches 'lunar:auth-changed' only when
+// the configured/signedIn state actually flips, so app.js isn't re-rendered on
+// unrelated updateHeader() calls (e.g. after saving a dashboard).
+window.LunarAuth = { configured: false, signedIn: false, requireSignIn: () => openAuthModal() };
+let lastAuthKey = null;
+function broadcastAuth() {
+  const configured = !!supabase;
+  const signedIn = !!currentUser;
+  window.LunarAuth = { configured, signedIn, requireSignIn: openAuthModal };
+  const key = `${configured}:${signedIn}`;
+  if (key === lastAuthKey) return;
+  lastAuthKey = key;
+  window.dispatchEvent(new CustomEvent('lunar:auth-changed'));
+}
+
 function setActiveId(id) {
   activeId = id || null;
   if (activeId) localStorage.setItem(ACTIVE_KEY, activeId);
@@ -111,6 +127,7 @@ function openAuthModal() {
 // --- Header UI ---
 function updateHeader() {
   const configured = !!supabase;
+  broadcastAuth();
   // No Supabase config -> hide all account controls, app stays guest-only.
   accountBtn.hidden = !configured;
   saveBtn.hidden = !configured;

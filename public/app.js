@@ -967,6 +967,29 @@ dividendRocZoomResetEl?.addEventListener('click', () => {
   drawDividendRocChart(dividendRocCanvas, lastRocSeries);
 });
 
+// --- Access gating ---
+// Guests can see live prices (watchlist chips + card summaries + ticker tape),
+// but charts and detailed info require an account. Gating is only enforced when
+// Supabase auth is actually configured (window.LunarAuth.configured), set by
+// account.js; otherwise everything stays open so the app still works standalone.
+function authGateActive() {
+  return !!(window.LunarAuth && window.LunarAuth.configured);
+}
+
+function isUnlocked() {
+  return !authGateActive() || !!(window.LunarAuth && window.LunarAuth.signedIn);
+}
+
+function gatePromptHtml(message = 'Sign in to view charts and detailed info.') {
+  return `
+    <div class="gate-prompt">
+      <div class="gate-prompt-icon" aria-hidden="true">🔒</div>
+      <p>${escapeHtml(message)}</p>
+      <button type="button" class="gate-signin-btn">Sign in / Create account</button>
+    </div>
+  `;
+}
+
 function chartBlockHtml(symbol, assetType = 'stock') {
   const period = cardPeriod.get(`${assetType}:${symbol}`) || '1mo';
   const periodButtons = PERIODS.map((p) => `
@@ -1549,6 +1572,12 @@ async function fillStockCard(card, symbol, { showNews = true, collapsed = false 
 async function loadStockCardDetails(card, symbol, { showNews = false } = {}) {
   const details = card.querySelector('.ticker-card-details');
   if (!details) return;
+  // Charts + dividend/predictions/news/congress are account-only.
+  if (!isUnlocked()) {
+    details.innerHTML = gatePromptHtml();
+    card.dataset.detailsLoaded = 'true';
+    return;
+  }
   try {
     const [newsRes, dividendRes, predictionsRes, congressRes] = await Promise.all([
       showNews ? fetchJson(`/api/news?symbol=${encodeURIComponent(symbol)}`) : Promise.resolve({ items: [] }),
@@ -1647,9 +1676,10 @@ function cryptoCardSkeleton(symbol) {
 
 async function fillCryptoCard(card, symbol, { showNews = true, collapsed = false } = {}) {
   try {
+    const locked = !isUnlocked();
     const [quoteRes, newsRes] = await Promise.all([
       fetchJson(`/api/crypto/quote?symbol=${encodeURIComponent(symbol)}`),
-      showNews ? fetchJson(`/api/crypto/news?symbol=${encodeURIComponent(symbol)}`).catch(() => ({ items: [] })) : Promise.resolve({ items: [] }),
+      (showNews && !locked) ? fetchJson(`/api/crypto/news?symbol=${encodeURIComponent(symbol)}`).catch(() => ({ items: [] })) : Promise.resolve({ items: [] }),
     ]);
 
     const q = quoteRes.quote || {};
@@ -1659,6 +1689,18 @@ async function fillCryptoCard(card, symbol, { showNews = true, collapsed = false
     const newsHtml = newsRes.items?.length
       ? newsRes.items.map(newsItemHtml).join('')
       : '<p class="muted">No recent news found.</p>';
+
+    // Charts + news are account-only; guests still see the price summary above.
+    const detailsInner = locked
+      ? gatePromptHtml()
+      : `
+        ${chartBlockHtml(symbol, 'crypto')}
+        ${showNews ? `
+        <div class="news-list">
+          <strong>Crypto News &amp; Speculation</strong>
+          ${newsHtml}
+        </div>` : ''}
+      `;
 
     card.classList.toggle('collapsible', collapsed);
     card.innerHTML = `
@@ -1681,18 +1723,11 @@ async function fillCryptoCard(card, symbol, { showNews = true, collapsed = false
         </div>
         ${collapsed ? '<span class="expand-indicator" aria-hidden="true">▾</span>' : ''}
       </div>
-      <div class="ticker-card-details"${collapsed ? ' hidden' : ''}>
-        ${chartBlockHtml(symbol, 'crypto')}
-        ${showNews ? `
-        <div class="news-list">
-          <strong>Crypto News &amp; Speculation</strong>
-          ${newsHtml}
-        </div>` : ''}
-      </div>
+      <div class="ticker-card-details"${collapsed ? ' hidden' : ''}>${detailsInner}</div>
     `;
     card.dataset.prevClose = q.pc ?? q.c ?? 0;
     card.dataset.lastPrice = q.c ?? 0;
-    if (!collapsed) loadChartForCard(card);
+    if (!collapsed && !locked) loadChartForCard(card);
     streamSubscribe(symbol, 'crypto');
   } catch (err) {
     card.innerHTML = `
@@ -2111,6 +2146,8 @@ function expandCard(card) {
     loadStockCardDetails(card, symbol, { showNews: false });
     return;
   }
+  // Gated (signed-out) cards show a sign-in prompt instead of a chart canvas.
+  if (!isUnlocked()) return;
   // chart canvas has zero size while [hidden], so it needs a redraw once visible
   if (lastCandles.has(`${assetType}:${symbol}`)) redrawChartForCard(card);
   else loadChartForCard(card);
@@ -2236,7 +2273,7 @@ tabButtons.forEach((btn) => {
     // canvases drawn while hidden fall back to a default size, so redraw once visible
     document.querySelectorAll(`#tab-${target} .ticker-card`).forEach(redrawChartForCard);
     if (target === 'tools' && lastRocSeries) drawDividendRocChart(dividendRocCanvas, lastRocSeries);
-    if (target === 'news' && !newsTabLoaded) loadNewsTab();
+    if (target === 'news' && !newsTabLoaded && isUnlocked()) loadNewsTab();
   });
 });
 
@@ -2253,6 +2290,45 @@ subtabButtons.forEach((btn) => {
       panel.hidden = panel.id !== `subtab-${target}`;
     });
   });
+});
+
+// --- Access gating: News & Tools tabs are account-only ---
+// A blurred overlay covers the whole panel for guests (prices tab stays open).
+function applyTabGates() {
+  const locked = !isUnlocked();
+  [
+    ['news', 'Sign in to read market news & speculation.'],
+    ['tools', 'Sign in to use the charts and calculators.'],
+  ].forEach(([name, message]) => {
+    const panel = document.getElementById(`tab-${name}`);
+    if (!panel) return;
+    panel.classList.toggle('gated', locked);
+    let cover = panel.querySelector(':scope > .gate-cover');
+    if (locked && !cover) {
+      cover = document.createElement('div');
+      cover.className = 'gate-cover';
+      cover.innerHTML = gatePromptHtml(message);
+      panel.appendChild(cover);
+    } else if (!locked && cover) {
+      cover.remove();
+    }
+  });
+}
+
+// Any "Sign in / Create account" button inside a gate prompt opens the auth modal.
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.gate-signin-btn')) {
+    window.LunarAuth?.requireSignIn?.();
+  }
+});
+
+// When sign-in state changes, re-render dashboards (lock/unlock card details)
+// and re-apply the News/Tools overlays.
+window.addEventListener('lunar:auth-changed', () => {
+  renderDashboard();
+  renderCryptoDashboard();
+  applyTabGates();
+  if (isUnlocked() && !newsTabLoaded && !document.getElementById('tab-news').hidden) loadNewsTab();
 });
 
 // --- Pull-to-refresh (touch devices) ---
@@ -2368,6 +2444,7 @@ renderCryptoWatchlistBar();
 renderCryptoDashboard();
 renderTickerTape();
 loadTickerTape();
+applyTabGates();
 startLivePolling();
 
 setInterval(() => {
