@@ -118,6 +118,28 @@ Users upgrade via **Stripe Checkout** (account menu → *Upgrade to Premium*) an
 manage/cancel via the **Customer Portal** (account menu → *Manage billing*).
 Entitlements update automatically from the webhook.
 
+## Mobile apps (iOS / Android)
+
+The same web app ships to the app stores via [Capacitor](https://capacitorjs.com/),
+with [RevenueCat](https://www.revenuecat.com/) handling in-app purchases that
+sync to the **same** `entitlements` table as Stripe (so Premium is shared across
+web + mobile). Push notifications and deep links are wired via Capacitor plugins,
+and there's an in-app **account deletion** flow (required by both stores).
+
+See **[docs/MOBILE.md](docs/MOBILE.md)** for the full build steps, RevenueCat /
+push / deep-link setup, and the **store submission checklist** (privacy policy,
+Apple App Privacy, Google Data safety, icons/screenshots, account deletion).
+
+Quick start:
+
+```bash
+# set NATIVE_API_ORIGIN in public/env.js to your deployed API origin, then:
+npx cap add ios        # needs macOS + Xcode
+npx cap add android    # needs Android Studio
+npm run cap:sync
+npm run cap:ios        # or: npm run cap:android
+```
+
 ## Project layout
 
 - `server/app.js` — The Express app itself (all `/api/*` routes + static file serving); no `.listen()` call, so it can be reused by both entrypoints below.
@@ -135,5 +157,11 @@ Entitlements update automatically from the webhook.
 - `server/entitlements.js` — Entitlement read/write helpers.
 - `server/featureFlags.js` — The free-vs-premium feature map (shared by server + client).
 - `server/stripe.js` — Stripe Checkout, Customer Portal, and webhook reconciliation.
+- `server/revenuecat.js` — RevenueCat webhook → shared entitlements (mobile IAP).
+- `public/env.js` — Resolves the API origin (relative on web, hosted backend inside the native shell).
+- `public/native.js` — Capacitor bootstrap (RevenueCat IAP, push notifications, deep links); no-op on web.
+- `capacitor.config.json` — Capacitor app config (`webDir: public`).
 - `supabase/schema.sql` — One-off database setup (profiles, dashboards, RLS, triggers).
 - `supabase/phase2-stripe.sql` — One-off paywall setup (entitlements table + RLS).
+- `supabase/phase3-mobile.sql` — One-off mobile setup (push tokens + entitlement provider columns).
+- `docs/MOBILE.md` — Mobile build + store submission checklist.

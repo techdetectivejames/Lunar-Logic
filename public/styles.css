@@ -1469,3 +1469,5 @@ body.modal-open { overflow: hidden; }
 .plan-badge.premium { color: #1a1203; background: linear-gradient(90deg, #f1c40f, #f39c12); border-color: transparent; }
 .account-menu-upgrade { color: var(--yellow); font-weight: 600; }
 .account-menu-upgrade:hover { background: rgba(241, 196, 15, 0.1); color: var(--yellow); }
+.account-menu-danger { color: var(--red); }
+.account-menu-danger:hover { background: rgba(231, 76, 60, 0.1); color: var(--red); }

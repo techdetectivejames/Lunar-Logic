@@ -11,6 +11,8 @@ const { withUser, requireUser, requireFeature, gateActive } = require('./auth');
 const { isPremiumActive } = require('./entitlements');
 const { FEATURES } = require('./featureFlags');
 const stripeBilling = require('./stripe');
+const revenuecat = require('./revenuecat');
+const { getAdmin } = require('./supabaseAdmin');
 
 const app = express();
 const MAX_BATCH_SYMBOLS = 60;
@@ -60,6 +62,12 @@ app.get('/api/config', (req, res) => {
   res.json({
     supabaseUrl: process.env.SUPABASE_URL || '',
     supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
+    // Public RevenueCat SDK keys (safe for clients) used by the native apps.
+    revenuecat: {
+      ios: process.env.REVENUECAT_IOS_KEY || '',
+      android: process.env.REVENUECAT_ANDROID_KEY || '',
+      entitlement: process.env.REVENUECAT_ENTITLEMENT_ID || 'premium',
+    },
   });
 });
 
@@ -99,6 +107,54 @@ app.post('/api/billing/portal', requireUser, async (req, res) => {
   try {
     const url = await stripeBilling.createPortalSession(req, req.user);
     res.json({ url });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Mobile: RevenueCat (in-app purchases sync to the same entitlements) ---
+
+// RevenueCat posts subscription events here. Access is granted/revoked in the
+// same `entitlements` table used by Stripe, so web + mobile share one source.
+app.post('/api/revenuecat/webhook', async (req, res) => {
+  try {
+    const type = await revenuecat.handleWebhook(req.body, req.headers.authorization || '');
+    res.json({ received: true, type });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// --- Mobile: device push-notification token registration ---
+
+app.post('/api/push/register', requireUser, async (req, res) => {
+  const admin = getAdmin();
+  if (!admin) return res.status(503).json({ error: 'Not configured' });
+  const token = String(req.body && req.body.token || '').trim();
+  const platform = String(req.body && req.body.platform || '').slice(0, 16) || null;
+  if (!token) return res.status(400).json({ error: 'Missing token' });
+  try {
+    const { error } = await admin
+      .from('push_tokens')
+      .upsert({ user_id: req.user.id, token, platform }, { onConflict: 'user_id,token' });
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Account deletion (required by the app stores) ---
+// Removes the auth user; FK "on delete cascade" wipes profiles, dashboards,
+// entitlements and push tokens. Subscriptions should be cancelled separately
+// via Stripe/Apple/Google (noted in the UI confirmation).
+app.delete('/api/account', requireUser, async (req, res) => {
+  const admin = getAdmin();
+  if (!admin) return res.status(503).json({ error: 'Not configured' });
+  try {
+    const { error } = await admin.auth.admin.deleteUser(req.user.id);
+    if (error) throw error;
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

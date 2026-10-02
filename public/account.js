@@ -61,9 +61,11 @@ window.LunarAuth = {
   configured: false,
   signedIn: false,
   token: null,
+  userId: null,
   requireSignIn: () => openAuthModal(),
   startCheckout: () => startCheckout(),
   openBillingPortal: () => openPortal(),
+  refreshFeatures: () => refreshFeatures(),
 };
 let lastAuthKey = null;
 function broadcastAuth() {
@@ -73,9 +75,11 @@ function broadcastAuth() {
     configured,
     signedIn,
     token: currentToken,
+    userId: currentUser ? currentUser.id : null,
     requireSignIn: openAuthModal,
     startCheckout,
     openBillingPortal: openPortal,
+    refreshFeatures,
   };
   const key = `${configured}:${signedIn}`;
   if (key === lastAuthKey) return;
@@ -88,7 +92,8 @@ function broadcastAuth() {
 async function authedFetch(url, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (currentToken) headers.Authorization = `Bearer ${currentToken}`;
-  return fetch(url, { ...options, headers });
+  const target = window.apiUrl ? window.apiUrl(url) : url;
+  return fetch(target, { ...options, headers });
 }
 
 async function refreshFeatures() {
@@ -104,6 +109,8 @@ async function refreshFeatures() {
 
 async function startCheckout() {
   if (!currentUser) { openAuthModal(); return; }
+  // Native apps must use in-app purchases (Apple/Google) via RevenueCat, not Stripe.
+  if (window.LunarNative && window.LunarNative.isNative) return window.LunarNative.purchasePremium();
   try {
     const res = await authedFetch('/api/billing/checkout', { method: 'POST' });
     const body = await res.json().catch(() => ({}));
@@ -116,6 +123,8 @@ async function startCheckout() {
 
 async function openPortal() {
   if (!currentUser) { openAuthModal(); return; }
+  // On native, subscriptions are managed by the OS store.
+  if (window.LunarNative && window.LunarNative.isNative) return window.LunarNative.manageSubscriptions();
   try {
     const res = await authedFetch('/api/billing/portal', { method: 'POST' });
     const body = await res.json().catch(() => ({}));
@@ -123,6 +132,20 @@ async function openPortal() {
     window.location.href = body.url;
   } catch (err) {
     toast(err.message || 'Could not open billing portal', 'error');
+  }
+}
+
+async function deleteAccount() {
+  if (!currentUser) return;
+  if (!confirm('Permanently delete your account and all saved dashboards? This cannot be undone. Cancel any active subscription first.')) return;
+  try {
+    const res = await authedFetch('/api/account', { method: 'DELETE' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || 'Could not delete account');
+    toast('Account deleted');
+    if (supabase) await supabase.auth.signOut();
+  } catch (err) {
+    toast(err.message || 'Could not delete account', 'error');
   }
 }
 
@@ -225,21 +248,27 @@ function toggleAccountMenu() {
 
   const feats = window.LunarFeatures || {};
   const premium = !!(feats.entitlement && feats.entitlement.premium);
-  const billing = !!feats.billingEnabled;
+  const native = !!(window.LunarNative && window.LunarNative.isNative);
+  // Web upgrades go through Stripe (billingEnabled); native through RevenueCat.
+  const canUpgrade = native || !!feats.billingEnabled;
   const planLabel = premium ? 'Premium' : 'Free';
-  let billingItem = '';
-  if (billing) {
-    billingItem = premium
+  let billingItems = '';
+  if (canUpgrade) {
+    billingItems += premium
       ? '<button type="button" class="account-menu-item" data-action="portal">Manage billing</button>'
       : '<button type="button" class="account-menu-item account-menu-upgrade" data-action="upgrade">Upgrade to Premium ⭐</button>';
+  }
+  if (native) {
+    billingItems += '<button type="button" class="account-menu-item" data-action="restore">Restore purchases</button>';
   }
 
   accountMenu.innerHTML = `
     <p class="account-menu-email">${escapeHtml(currentUser.email || 'Signed in')}</p>
     <p class="account-menu-plan">Plan: <span class="plan-badge ${premium ? 'premium' : ''}">${planLabel}</span></p>
     <button type="button" class="account-menu-item" data-action="dashboards">My dashboards</button>
-    ${billingItem}
+    ${billingItems}
     <button type="button" class="account-menu-item" data-action="signout">Sign out</button>
+    <button type="button" class="account-menu-item account-menu-danger" data-action="delete-account">Delete account</button>
   `;
   document.body.appendChild(accountMenu);
   const rect = accountBtn.getBoundingClientRect();
@@ -255,6 +284,8 @@ function toggleAccountMenu() {
     else if (action === 'dashboards') openDashboardsModal();
     else if (action === 'upgrade') startCheckout();
     else if (action === 'portal') openPortal();
+    else if (action === 'restore') window.LunarNative?.restorePurchases?.();
+    else if (action === 'delete-account') deleteAccount();
   });
 }
 document.addEventListener('click', (e) => {

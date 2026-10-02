@@ -3,3 +3,8 @@ node_modules/
 *.log
 .venv/
 __pycache__/
+
+# Capacitor native projects (regenerate with `npx cap add ios|android`)
+/ios/
+/android/
+.DS_Store

@@ -219,7 +219,8 @@ async function fetchJson(url) {
   // public routes only.
   const token = window.LunarAuth && window.LunarAuth.token;
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(url, headers.Authorization ? { headers } : undefined);
+  const target = window.apiUrl ? window.apiUrl(url) : url;
+  const res = await fetch(target, headers.Authorization ? { headers } : undefined);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new Error(body.error || `Request failed (${res.status})`);

@@ -9,7 +9,7 @@ let clientPromise = null;
 async function create() {
   let cfg;
   try {
-    const res = await fetch('/api/config');
+    const res = await fetch(window.apiUrl ? window.apiUrl('/api/config') : '/api/config');
     if (!res.ok) throw new Error(`config ${res.status}`);
     cfg = await res.json();
   } catch {
