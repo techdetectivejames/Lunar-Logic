@@ -34,11 +34,16 @@
 
 * { box-sizing: border-box; }
 
+/* Suppress the browser/WebView native pull-to-refresh & overscroll bounce on the
+   page scroller, so only our custom pull-to-refresh handler drives a refresh. */
+html { overscroll-behavior-y: contain; }
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
+  overscroll-behavior-y: contain;
   /* Clear the fixed bottom tab bar (+ device safe area). */
   padding-bottom: calc(60px + env(safe-area-inset-bottom));
 }

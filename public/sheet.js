@@ -74,4 +74,33 @@
   }
 
   document.querySelectorAll('.modal-overlay').forEach(setup);
+
+  // --- Shared sheet open/close state (vaul onOpenChange equivalent) ---
+  // Watching the `hidden` attribute catches every open/close path, including a
+  // swipe-dismiss that toggles the overlay. Consumers (e.g. pull-to-refresh)
+  // read window.LunarSheet to avoid conflicting with an open sheet.
+  var sheetState = { open: false, closedAt: 0 };
+  function recomputeSheetState() {
+    var anyOpen = Array.prototype.some.call(
+      document.querySelectorAll('.sheet-overlay'),
+      function (o) { return !o.hidden; }
+    );
+    if (anyOpen === sheetState.open) return;
+    sheetState.open = anyOpen;
+    if (!anyOpen) sheetState.closedAt = Date.now(); // start the cooldown on close
+  }
+  document.querySelectorAll('.sheet-overlay').forEach(function (o) {
+    new MutationObserver(recomputeSheetState).observe(o, {
+      attributes: true,
+      attributeFilter: ['hidden'],
+    });
+  });
+
+  window.LunarSheet = {
+    isOpen: function () { return sheetState.open; },
+    // True during the brief window after a sheet closes, so the closing swipe's
+    // trailing touchend/touchstart can't accidentally trigger pull-to-refresh.
+    closedRecently: function (ms) { return Date.now() - sheetState.closedAt < (ms || 400); },
+  };
 })();
+

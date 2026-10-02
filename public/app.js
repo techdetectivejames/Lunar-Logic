@@ -2542,6 +2542,10 @@ if (pullRefreshEl && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
 
   window.addEventListener('touchstart', (e) => {
     if (refreshing || window.scrollY > 0 || e.touches.length !== 1) return;
+    // Don't fight an open sheet. Stay suppressed through a short cooldown after
+    // close, since the closing swipe's touchend can land after the sheet
+    // unmounts; a genuinely fresh touchstart past the cooldown works normally.
+    if (window.LunarSheet && (window.LunarSheet.isOpen() || window.LunarSheet.closedRecently(400))) return;
     pullStartY = e.touches[0].clientY;
     pulling = true;
     pullRefreshEl.classList.add('dragging');
@@ -2549,6 +2553,8 @@ if (pullRefreshEl && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
 
   window.addEventListener('touchmove', (e) => {
     if (!pulling || pullStartY === null || refreshing) return;
+    // A sheet opened mid-pull — abandon the pull, no indicator growth.
+    if (window.LunarSheet && window.LunarSheet.isOpen()) { resetPull(); return; }
     const distance = e.touches[0].clientY - pullStartY;
     if (distance <= 0 || window.scrollY > 0) { resetPull(); return; }
     e.preventDefault();
