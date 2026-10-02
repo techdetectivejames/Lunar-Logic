@@ -25,6 +25,7 @@ npm install
 npx cap add ios        # macOS + Xcode required
 npx cap add android    # Android Studio required
 npm run cap:sync
+npm run cap:assets     # generate app icons + splash from assets/ into both platforms
 ```
 
 Then open the native projects:
@@ -111,9 +112,12 @@ entitlement provider columns).
 - [ ] "Manage subscription" routes to the OS store (implemented).
 
 ### Assets
-- [ ] **App icon**: 1024×1024 (iOS), adaptive icon (Android). Generate platform
-      sets with `@capacitor/assets` from a source icon (see `App Icons/`).
-- [ ] **Splash screen** for both platforms.
+- [ ] **App icon**: 1024×1024 (iOS), adaptive icon (Android). Source files live in
+      `assets/` (`icon-only.png`, `icon-foreground.png`, `icon-background.png`,
+      `splash.png`, `splash-dark.png`). Regenerate the platform sets with
+      `npm run cap:assets` (runs `@capacitor/assets`; requires the ios/android
+      projects to exist first via `cap add`).
+- [ ] **Splash screen** for both platforms (generated from `assets/splash*.png`).
 - [ ] **Screenshots**: iPhone 6.7" & 6.5" (and iPad if supported); Android phone
       + 7"/10" tablet. Show prices, a chart, and the upgrade screen.
 - [ ] App name, subtitle/short description, full description, keywords, category
