@@ -66,6 +66,9 @@ async function fetchPage(page) {
   url.searchParams.set('page', String(page));
   const res = await fetch(url, { headers: authHeaders(), cache: 'no-store' });
   if (!res.ok) {
+    if (res.status === 429) {
+      console.warn(`[429] bargo /congress/v1/trades retry-after=${res.headers.get('retry-after') || 'n/a'} (free tier ~30/day keyless)`);
+    }
     const err = new Error(`Bargo Congress Trades API request failed (${res.status})`);
     err.status = res.status === 429 ? 429 : res.status;
     throw err;

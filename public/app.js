@@ -45,6 +45,11 @@ const PERIODS = ['5d', '1mo', '3mo', '6mo', '1y', '2y', '5y'];
 const cardPeriod = new Map(); // `${type}:${symbol}` -> selected chart period
 const lastCandles = new Map(); // `${type}:${symbol}` -> last fetched candles (for resize redraws)
 const zoomRanges = new Map(); // `${type}:${symbol}` -> [startIdx, endIdx) into lastCandles, when zoomed in
+// Caches fetched candles per symbol+period so flipping between periods (or
+// re-opening a card) reuses data within the TTL instead of refetching.
+const candleCache = new Map(); // `${type}:${symbol}:${period}` -> { candles, time }
+const CANDLE_TTL_MS = 60_000;
+const chartLoadTimers = new Map(); // `${type}:${symbol}` -> debounce timer for period switching
 const CHART_STYLE_STORAGE_KEY = 'finapp.chartStyle';
 const CHART_STYLES = [
   { id: 'candle', label: 'Candle' },
@@ -212,25 +217,38 @@ function saveCryptoWatchlist(list) {
 
 let cryptoWatchlist = loadCryptoWatchlist();
 
+// Coalesces identical in-flight GETs so overlapping callers (e.g. the refresh
+// loop and a lazy card load) share one network request instead of racing.
+const inflightGets = new Map();
+
 async function fetchJson(url) {
-  const headers = {};
-  // Attach the Supabase access token (kept current by account.js) so the server
-  // can enforce auth/entitlement gating. Guests send no header and hit the
-  // public routes only.
-  const token = window.LunarAuth && window.LunarAuth.token;
-  if (token) headers.Authorization = `Bearer ${token}`;
   const target = window.apiUrl ? window.apiUrl(url) : url;
-  const res = await fetch(target, headers.Authorization ? { headers } : undefined);
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = new Error(body.error || `Request failed (${res.status})`);
-    err.status = res.status;
-    err.authRequired = !!body.authRequired;
-    err.upgradeRequired = !!body.upgradeRequired;
-    err.feature = body.feature || null;
-    throw err;
+  if (inflightGets.has(target)) return inflightGets.get(target);
+  const promise = (async () => {
+    const headers = {};
+    // Attach the Supabase access token (kept current by account.js) so the server
+    // can enforce auth/entitlement gating. Guests send no header and hit the
+    // public routes only.
+    const token = window.LunarAuth && window.LunarAuth.token;
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(target, headers.Authorization ? { headers } : undefined);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(body.error || `Request failed (${res.status})`);
+      err.status = res.status;
+      err.authRequired = !!body.authRequired;
+      err.upgradeRequired = !!body.upgradeRequired;
+      err.feature = body.feature || null;
+      throw err;
+    }
+    return body;
+  })();
+  inflightGets.set(target, promise);
+  try {
+    return await promise;
+  } finally {
+    inflightGets.delete(target);
   }
-  return body;
 }
 
 function fmtMoney(n) {
@@ -1522,22 +1540,39 @@ async function loadChartForCard(card) {
   const key = `${type}:${symbol}`;
 
   const period = cardPeriod.get(key) || '1mo';
+  const cacheKey = `${key}:${period}`;
+
+  // Reuse recently-fetched candles for this symbol+period instead of refetching.
+  const cached = candleCache.get(cacheKey);
+  if (cached && Date.now() - cached.time < CANDLE_TTL_MS) {
+    await drawFromCandles(card, canvas, key, symbol, type, cached.candles);
+    return;
+  }
+
   const apiPath = type === 'crypto' ? '/api/crypto/candles' : '/api/candles';
   try {
     const [res] = await Promise.all([
       fetchJson(`${apiPath}?symbol=${encodeURIComponent(symbol)}&period=${period}`),
       ensureCardDividends(key, symbol, type),
     ]);
-    updateDividendToggle(card, cardPaysDividend.get(key), dividendsInWindow(res.candles, cardDividends.get(key)).length > 0);
-    lastCandles.set(key, res.candles);
-    zoomRanges.delete(key); // fresh data (new period) invalidates any prior zoom
-    updateZoomResetVisibility(canvas, false);
-    drawCandles(canvas, res.candles, { key });
+    candleCache.set(cacheKey, { candles: res.candles, time: Date.now() });
+    await drawFromCandles(card, canvas, key, symbol, type, res.candles);
   } catch {
     lastCandles.delete(key);
     zoomRanges.delete(key);
     drawCandles(canvas, [], { key });
   }
+}
+
+// Applies already-fetched candles to a card: refresh the dividend toggle, reset
+// zoom, and draw. Shared by the cache-hit and freshly-fetched paths.
+async function drawFromCandles(card, canvas, key, symbol, type, candles) {
+  await ensureCardDividends(key, symbol, type); // cached after first call - cheap
+  updateDividendToggle(card, cardPaysDividend.get(key), dividendsInWindow(candles, cardDividends.get(key)).length > 0);
+  lastCandles.set(key, candles);
+  zoomRanges.delete(key); // fresh data (new period) invalidates any prior zoom
+  updateZoomResetVisibility(canvas, false);
+  drawCandles(canvas, candles, { key });
 }
 
 function redrawChartForCard(card) {
@@ -2236,7 +2271,17 @@ function handlePeriodClick(e) {
   if (cardPeriod.get(key) === period) return;
   cardPeriod.set(key, period);
   btn.parentElement.querySelectorAll('.period-btn').forEach((b) => b.classList.toggle('active', b === btn));
-  loadChartForCard(card);
+
+  // Cache hit -> draw immediately. Miss -> debounce so fast period-flipping
+  // fires a single fetch for the period the user actually lands on.
+  const cached = candleCache.get(`${key}:${period}`);
+  if (cached && Date.now() - cached.time < CANDLE_TTL_MS) {
+    clearTimeout(chartLoadTimers.get(key));
+    loadChartForCard(card);
+    return;
+  }
+  clearTimeout(chartLoadTimers.get(key));
+  chartLoadTimers.set(key, setTimeout(() => loadChartForCard(card), 160));
 }
 
 dashboardEl.addEventListener('click', handlePeriodClick);

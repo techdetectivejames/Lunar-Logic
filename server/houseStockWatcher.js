@@ -37,6 +37,9 @@ async function fetchAll({ forceRefresh = false } = {}) {
   inflight = (async () => {
     const res = await fetch(DATA_URL, { cache: 'no-store' });
     if (!res.ok) {
+      if (res.status === 429) {
+        console.warn(`[429] housestockwatcher ${DATA_URL} retry-after=${res.headers.get('retry-after') || 'n/a'}`);
+      }
       const err = new Error(`House Stock Watcher request failed (${res.status})`);
       err.status = res.status;
       throw err;

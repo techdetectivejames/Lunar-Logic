@@ -4,6 +4,9 @@ const BASE_URL = 'https://finnhub.io/api/v1';
 
 // Very small in-memory cache to stay well under Finnhub's free-tier rate limit.
 const cache = new Map();
+// Coalesces identical requests that are in flight at the same time so N callers
+// (e.g. the refresh loop + a card expand) share ONE network call, not N.
+const inflight = new Map();
 
 function getCached(key, ttlMs) {
   const entry = cache.get(key);
@@ -69,6 +72,15 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Parses an HTTP Retry-After header (delta-seconds or an HTTP date) to ms.
+function parseRetryAfter(header) {
+  if (!header) return null;
+  const secs = Number(header);
+  if (!Number.isNaN(secs)) return Math.max(0, secs * 1000);
+  const when = Date.parse(header);
+  return Number.isNaN(when) ? null : Math.max(0, when - Date.now());
+}
+
 const MAX_RETRIES_ON_429 = 2;
 const RETRY_BASE_DELAY_MS = 500;
 
@@ -81,22 +93,29 @@ async function fetchOnce(url) {
     const err = new Error(body?.error || `Finnhub request failed (${res.status})`);
     err.status = res.status;
     err.finnhubError = body?.error;
+    if (res.status === 429) {
+      err.retryAfterMs = parseRetryAfter(res.headers.get('retry-after'));
+      try {
+        console.warn(`[429] finnhub ${new URL(url).pathname} retry-after=${res.headers.get('retry-after') || 'n/a'}`);
+      } catch { /* ignore */ }
+    }
     throw err;
   }
 
   return body;
 }
 
-// Retries transient 429s with a short backoff before giving up, since a
-// burst of concurrent calls can trip Finnhub's rate limiter even when we're
-// nowhere near the per-minute budget.
+// Retries transient 429s with exponential backoff (honouring Retry-After when
+// the provider sends it) before giving up, since a burst of concurrent calls can
+// trip Finnhub's rate limiter even when we're nowhere near the per-minute budget.
 async function fetchWithRetry(url) {
   for (let attempt = 0; attempt <= MAX_RETRIES_ON_429; attempt += 1) {
     try {
       return await fetchOnce(url);
     } catch (err) {
       if (err.status !== 429 || attempt === MAX_RETRIES_ON_429) throw err;
-      await sleep(RETRY_BASE_DELAY_MS * (attempt + 1));
+      const backoff = err.retryAfterMs != null ? err.retryAfterMs : RETRY_BASE_DELAY_MS * 2 ** attempt;
+      await sleep(backoff);
     }
   }
 }
@@ -124,15 +143,27 @@ async function finnhubRequest(path, params = {}, ttlMs = 30_000) {
     if (stale) return stale;
   }
 
+  // Dedup: if the same URL is already being fetched, await that one instead.
+  if (inflight.has(cacheKey)) return inflight.get(cacheKey);
+
+  const promise = (async () => {
+    try {
+      const body = await withConcurrencyLimit(() => fetchWithRetry(url.toString()));
+      setCached(cacheKey, body);
+      return body;
+    } catch (err) {
+      // Rate-limited or transient failure - serve the last known value if we have one.
+      const stale = getStale(cacheKey);
+      if (stale) return stale;
+      throw err;
+    }
+  })();
+
+  inflight.set(cacheKey, promise);
   try {
-    const body = await withConcurrencyLimit(() => fetchWithRetry(url.toString()));
-    setCached(cacheKey, body);
-    return body;
-  } catch (err) {
-    // Rate-limited or transient failure - serve the last known value if we have one.
-    const stale = getStale(cacheKey);
-    if (stale) return stale;
-    throw err;
+    return await promise;
+  } finally {
+    inflight.delete(cacheKey);
   }
 }
 

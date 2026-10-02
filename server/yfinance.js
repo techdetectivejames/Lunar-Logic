@@ -41,21 +41,34 @@ function isRateLimitError(err) {
   return /429|too many requests/i.test(err?.message || '');
 }
 
-async function withRetry(fn) {
+async function withRetry(fn, label) {
   for (let attempt = 0; attempt <= MAX_RETRIES_ON_429; attempt += 1) {
     try {
       return await withConcurrencyLimit(fn);
     } catch (err) {
       if (!isRateLimitError(err) || attempt === MAX_RETRIES_ON_429) throw err;
-      await sleep(RETRY_BASE_DELAY_MS * (attempt + 1));
+      if (attempt === 0) {
+        try { console.warn(`[429] yahoo ${label || ''}`.trim()); } catch { /* ignore */ }
+      }
+      // Exponential backoff (Yahoo doesn't expose a usable Retry-After here).
+      await sleep(RETRY_BASE_DELAY_MS * 2 ** attempt);
     }
   }
 }
 
+// Coalesces identical in-flight requests per cache so concurrent callers for the
+// same key share ONE network call instead of each hitting Yahoo.
+const inflightByCache = new WeakMap();
+
 function withCache(cache, key, ttlMs, fn) {
   const entry = cache.get(key);
   if (entry && Date.now() - entry.time < ttlMs) return Promise.resolve(entry.data);
-  return withRetry(fn)
+
+  let inflight = inflightByCache.get(cache);
+  if (!inflight) { inflight = new Map(); inflightByCache.set(cache, inflight); }
+  if (inflight.has(key)) return inflight.get(key);
+
+  const promise = withRetry(fn, key)
     .then((data) => {
       cache.set(key, { data, time: Date.now() });
       return data;
@@ -64,7 +77,11 @@ function withCache(cache, key, ttlMs, fn) {
       // Rate-limited or transient failure - serve the last known value if we have one.
       if (entry) return entry.data;
       throw err;
-    });
+    })
+    .finally(() => inflight.delete(key));
+
+  inflight.set(key, promise);
+  return promise;
 }
 
 function toDateStr(value) {
