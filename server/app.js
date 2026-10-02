@@ -31,6 +31,18 @@ app.use(express.json());
 
 // --- API routes ---
 
+// Public Supabase config for the browser client. The anon key is designed to
+// be exposed to the browser - row-level security (not key secrecy) is what
+// protects user data. Returns empty strings when unset so the frontend quietly
+// falls back to guest-only mode (default dashboard, no sign-in / saving).
+app.get('/api/config', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    supabaseUrl: process.env.SUPABASE_URL || '',
+    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
+  });
+});
+
 app.get('/api/quote', async (req, res) => {
   const symbol = String(req.query.symbol || '').toUpperCase();
   if (!isValidSymbol(symbol)) return res.status(400).json({ error: 'Invalid symbol' });
