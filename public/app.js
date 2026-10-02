@@ -213,9 +213,22 @@ function saveCryptoWatchlist(list) {
 let cryptoWatchlist = loadCryptoWatchlist();
 
 async function fetchJson(url) {
-  const res = await fetch(url);
+  const headers = {};
+  // Attach the Supabase access token (kept current by account.js) so the server
+  // can enforce auth/entitlement gating. Guests send no header and hit the
+  // public routes only.
+  const token = window.LunarAuth && window.LunarAuth.token;
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(url, headers.Authorization ? { headers } : undefined);
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    const err = new Error(body.error || `Request failed (${res.status})`);
+    err.status = res.status;
+    err.authRequired = !!body.authRequired;
+    err.upgradeRequired = !!body.upgradeRequired;
+    err.feature = body.feature || null;
+    throw err;
+  }
   return body;
 }
 
@@ -990,6 +1003,60 @@ function gatePromptHtml(message = 'Sign in to view charts and detailed info.') {
   `;
 }
 
+// --- Premium (paid) gating, driven by the server feature-flag map ---
+// window.LunarFeatures is populated by account.js from GET /api/features and
+// mirrors exactly what the server enforces, so these checks just decide whether
+// to render content or an upgrade prompt (the server is the real gatekeeper).
+function features() {
+  return window.LunarFeatures || null;
+}
+
+function featureTier(id) {
+  const f = features();
+  return (f && f.features && f.features[id] && f.features[id].tier) || 'free';
+}
+
+function isPremium() {
+  const f = features();
+  return !!(f && f.entitlement && f.entitlement.premium);
+}
+
+function billingEnabled() {
+  const f = features();
+  return !!(f && f.billingEnabled);
+}
+
+// Whether the SERVER actually enforces premium gating. When it doesn't (e.g. a
+// Phase-1-only deploy with no service-role key), premium content is open to any
+// signed-in user, so the client shouldn't show upgrade prompts either.
+function premiumGateActive() {
+  const f = features();
+  return !!(f && f.gateActive);
+}
+
+// Can the current visitor actually use this feature? public -> always;
+// free -> any signed-in user; premium -> active subscriber (when enforced).
+function canAccess(featureId) {
+  const tier = featureTier(featureId);
+  if (tier === 'public') return true;
+  if (!isUnlocked()) return false;
+  if (tier === 'premium') return !premiumGateActive() || isPremium();
+  return true;
+}
+
+function upgradePromptHtml(message = 'Upgrade to Premium to unlock this.') {
+  const btn = billingEnabled()
+    ? '<button type="button" class="gate-upgrade-btn">Upgrade to Premium</button>'
+    : '<p class="muted small">Billing isn\'t configured yet.</p>';
+  return `
+    <div class="gate-prompt gate-premium">
+      <div class="gate-prompt-icon" aria-hidden="true">⭐</div>
+      <p>${escapeHtml(message)}</p>
+      ${btn}
+    </div>
+  `;
+}
+
 function chartBlockHtml(symbol, assetType = 'stock') {
   const period = cardPeriod.get(`${assetType}:${symbol}`) || '1mo';
   const periodButtons = PERIODS.map((p) => `
@@ -1579,11 +1646,13 @@ async function loadStockCardDetails(card, symbol, { showNews = false } = {}) {
     return;
   }
   try {
+    const canPredict = canAccess('charts.predictions');
+    const canCongress = canAccess('data.congress');
     const [newsRes, dividendRes, predictionsRes, congressRes] = await Promise.all([
-      showNews ? fetchJson(`/api/news?symbol=${encodeURIComponent(symbol)}`) : Promise.resolve({ items: [] }),
+      showNews ? fetchJson(`/api/news?symbol=${encodeURIComponent(symbol)}`).catch(() => ({ items: [] })) : Promise.resolve({ items: [] }),
       fetchJson(`/api/dividend?symbol=${encodeURIComponent(symbol)}`).catch(() => ({ paysDividend: false })),
-      fetchJson(`/api/predictions?symbol=${encodeURIComponent(symbol)}`).catch(() => null),
-      fetchJson(`/api/congress?symbol=${encodeURIComponent(symbol)}&days=365`).catch(() => ({ trades: [] })),
+      canPredict ? fetchJson(`/api/predictions?symbol=${encodeURIComponent(symbol)}`).catch(() => null) : Promise.resolve(null),
+      canCongress ? fetchJson(`/api/congress?symbol=${encodeURIComponent(symbol)}&days=365`).catch(() => ({ trades: [] })) : Promise.resolve({ trades: [] }),
     ]);
 
     const newsHtml = newsRes.items?.length
@@ -1591,8 +1660,14 @@ async function loadStockCardDetails(card, symbol, { showNews = false } = {}) {
       : '<p class="muted">No recent news found.</p>';
 
     const dividendHtml = dividendBlockHtml(dividendRes, parseFloat(card.dataset.lastPrice) || null);
-    const predictionsHtml = predictionsBlockHtml(predictionsRes);
-    const congressHtml = congressCardBlockHtml(congressRes.trades || []);
+    // Analyst predictions + congressional trades are Premium — show an upgrade
+    // prompt in their place for free users instead of the real block.
+    const predictionsHtml = canPredict
+      ? predictionsBlockHtml(predictionsRes)
+      : upgradePromptHtml('Analyst predictions are a Premium feature.');
+    const congressHtml = canCongress
+      ? congressCardBlockHtml(congressRes.trades || [])
+      : upgradePromptHtml('Congressional trades are a Premium feature.');
 
     details.innerHTML = `
       ${chartBlockHtml(symbol, 'stock')}
@@ -1877,14 +1952,20 @@ async function loadNewsTab() {
   newsStocksBodyEl.innerHTML = '<p class="spinner">Loading stock market news…</p>';
   newsCryptoBodyEl.innerHTML = '<p class="spinner">Loading crypto news…</p>';
 
+  // Market news feed is Premium; crypto news is free (for signed-in users).
+  const canMarket = canAccess('news.market');
   const [stockNews, cryptoNews] = await Promise.all([
-    fetchJson('/api/news/market?limit=20').catch((err) => ({ items: [], error: err.message })),
+    canMarket
+      ? fetchJson('/api/news/market?limit=20').catch((err) => ({ items: [], error: err.message }))
+      : Promise.resolve({ items: [], upgrade: true }),
     fetchJson('/api/crypto/news?limit=20').catch((err) => ({ items: [], error: err.message })),
   ]);
 
-  newsStocksBodyEl.innerHTML = stockNews.items?.length
-    ? stockNews.items.map(newsItemHtml).join('')
-    : `<p class="${stockNews.error ? 'error-text' : 'muted'}">${escapeHtml(stockNews.error || 'No recent stock market news found.')}</p>`;
+  newsStocksBodyEl.innerHTML = stockNews.upgrade
+    ? upgradePromptHtml('The market news feed is a Premium feature.')
+    : stockNews.items?.length
+      ? stockNews.items.map(newsItemHtml).join('')
+      : `<p class="${stockNews.error ? 'error-text' : 'muted'}">${escapeHtml(stockNews.error || 'No recent stock market news found.')}</p>`;
 
   newsCryptoBodyEl.innerHTML = cryptoNews.items?.length
     ? cryptoNews.items.map(newsItemHtml).join('')
@@ -2292,44 +2373,70 @@ subtabButtons.forEach((btn) => {
   });
 });
 
-// --- Access gating: News & Tools tabs are account-only ---
-// A blurred overlay covers the whole panel for guests (prices tab stays open).
-function applyTabGates() {
-  const locked = !isUnlocked();
-  [
-    ['news', 'Sign in to read market news & speculation.'],
-    ['tools', 'Sign in to use the charts and calculators.'],
-  ].forEach(([name, message]) => {
-    const panel = document.getElementById(`tab-${name}`);
-    if (!panel) return;
-    panel.classList.toggle('gated', locked);
-    let cover = panel.querySelector(':scope > .gate-cover');
-    if (locked && !cover) {
-      cover = document.createElement('div');
-      cover.className = 'gate-cover';
-      cover.innerHTML = gatePromptHtml(message);
-      panel.appendChild(cover);
-    } else if (!locked && cover) {
-      cover.remove();
-    }
-  });
+// --- Access gating: News & Tools tabs ---
+// Guests get the whole panel blurred with a sign-in prompt. Signed-in users see
+// the free content; individual Premium sections get an upgrade overlay instead.
+function gateWholePanel(name, locked, message) {
+  const panel = document.getElementById(`tab-${name}`);
+  if (!panel) return;
+  panel.classList.toggle('gated', locked);
+  let cover = panel.querySelector(':scope > .gate-cover');
+  if (locked && !cover) {
+    cover = document.createElement('div');
+    cover.className = 'gate-cover';
+    cover.innerHTML = gatePromptHtml(message);
+    panel.appendChild(cover);
+  } else if (!locked && cover) {
+    cover.remove();
+  }
 }
 
-// Any "Sign in / Create account" button inside a gate prompt opens the auth modal.
+function gateSection(selector, locked, message) {
+  const el = document.querySelector(selector);
+  if (!el) return;
+  el.classList.toggle('section-gated', locked);
+  let cover = el.querySelector(':scope > .gate-cover');
+  if (locked && !cover) {
+    cover = document.createElement('div');
+    cover.className = 'gate-cover';
+    cover.innerHTML = upgradePromptHtml(message);
+    el.appendChild(cover);
+  } else if (!locked && cover) {
+    cover.remove();
+  }
+}
+
+function applyTabGates() {
+  const signedIn = isUnlocked();
+  // Guests: blur the whole News & Tools tabs.
+  gateWholePanel('news', !signedIn, 'Sign in to read market news & speculation.');
+  gateWholePanel('tools', !signedIn, 'Sign in to use the charts and calculators.');
+  if (!signedIn) return;
+  // Signed-in: gate only the Premium sections within Tools (dividend calculator
+  // stays free). The News tab's Premium market feed is gated inside loadNewsTab.
+  gateSection('.total-return-section', !canAccess('tools.totalReturn'), 'The Total Return calculator is a Premium feature.');
+  gateSection('.dividend-roc-section', !canAccess('tools.dividendHistory'), 'Dividend History charts are a Premium feature.');
+}
+
+// Gate prompt buttons: sign in, or start Stripe checkout.
 document.addEventListener('click', (e) => {
   if (e.target.closest('.gate-signin-btn')) {
     window.LunarAuth?.requireSignIn?.();
+  } else if (e.target.closest('.gate-upgrade-btn')) {
+    window.LunarAuth?.startCheckout?.();
   }
 });
 
-// When sign-in state changes, re-render dashboards (lock/unlock card details)
-// and re-apply the News/Tools overlays.
-window.addEventListener('lunar:auth-changed', () => {
+// Re-render gated content when sign-in state OR entitlement (plan) changes.
+function refreshGatedContent() {
   renderDashboard();
   renderCryptoDashboard();
   applyTabGates();
-  if (isUnlocked() && !newsTabLoaded && !document.getElementById('tab-news').hidden) loadNewsTab();
-});
+  if (newsTabLoaded) loadNewsTab();
+  else if (isUnlocked() && !document.getElementById('tab-news').hidden) loadNewsTab();
+}
+window.addEventListener('lunar:auth-changed', refreshGatedContent);
+window.addEventListener('lunar:features-changed', refreshGatedContent);
 
 // --- Pull-to-refresh (touch devices) ---
 

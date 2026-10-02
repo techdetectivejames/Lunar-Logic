@@ -41,6 +41,7 @@ const dashList = document.getElementById('dashboards-list');
 // --- State ---
 let supabase = null;
 let currentUser = null;
+let currentToken = null;
 let dashboards = [];
 let activeId = localStorage.getItem(ACTIVE_KEY) || null;
 let dirty = false;
@@ -56,16 +57,73 @@ function escapeHtml(str) {
 // modal from its "Sign in" prompts. Dispatches 'lunar:auth-changed' only when
 // the configured/signedIn state actually flips, so app.js isn't re-rendered on
 // unrelated updateHeader() calls (e.g. after saving a dashboard).
-window.LunarAuth = { configured: false, signedIn: false, requireSignIn: () => openAuthModal() };
+window.LunarAuth = {
+  configured: false,
+  signedIn: false,
+  token: null,
+  requireSignIn: () => openAuthModal(),
+  startCheckout: () => startCheckout(),
+  openBillingPortal: () => openPortal(),
+};
 let lastAuthKey = null;
 function broadcastAuth() {
   const configured = !!supabase;
   const signedIn = !!currentUser;
-  window.LunarAuth = { configured, signedIn, requireSignIn: openAuthModal };
+  window.LunarAuth = {
+    configured,
+    signedIn,
+    token: currentToken,
+    requireSignIn: openAuthModal,
+    startCheckout,
+    openBillingPortal: openPortal,
+  };
   const key = `${configured}:${signedIn}`;
   if (key === lastAuthKey) return;
   lastAuthKey = key;
   window.dispatchEvent(new CustomEvent('lunar:auth-changed'));
+  refreshFeatures();
+}
+
+// --- Entitlements / feature flags (what the server allows) ---
+async function authedFetch(url, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (currentToken) headers.Authorization = `Bearer ${currentToken}`;
+  return fetch(url, { ...options, headers });
+}
+
+async function refreshFeatures() {
+  try {
+    const res = await authedFetch('/api/features');
+    if (res.ok) window.LunarFeatures = await res.json();
+  } catch {
+    /* keep whatever we had */
+  }
+  window.dispatchEvent(new CustomEvent('lunar:features-changed'));
+  updateHeader();
+}
+
+async function startCheckout() {
+  if (!currentUser) { openAuthModal(); return; }
+  try {
+    const res = await authedFetch('/api/billing/checkout', { method: 'POST' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.url) throw new Error(body.error || 'Could not start checkout');
+    window.location.href = body.url;
+  } catch (err) {
+    toast(err.message || 'Checkout failed', 'error');
+  }
+}
+
+async function openPortal() {
+  if (!currentUser) { openAuthModal(); return; }
+  try {
+    const res = await authedFetch('/api/billing/portal', { method: 'POST' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.url) throw new Error(body.error || 'Could not open billing portal');
+    window.location.href = body.url;
+  } catch (err) {
+    toast(err.message || 'Could not open billing portal', 'error');
+  }
 }
 
 function setActiveId(id) {
@@ -164,9 +222,23 @@ function toggleAccountMenu() {
   if (accountMenu) { closeAccountMenu(); return; }
   accountMenu = document.createElement('div');
   accountMenu.className = 'account-menu';
+
+  const feats = window.LunarFeatures || {};
+  const premium = !!(feats.entitlement && feats.entitlement.premium);
+  const billing = !!feats.billingEnabled;
+  const planLabel = premium ? 'Premium' : 'Free';
+  let billingItem = '';
+  if (billing) {
+    billingItem = premium
+      ? '<button type="button" class="account-menu-item" data-action="portal">Manage billing</button>'
+      : '<button type="button" class="account-menu-item account-menu-upgrade" data-action="upgrade">Upgrade to Premium ⭐</button>';
+  }
+
   accountMenu.innerHTML = `
     <p class="account-menu-email">${escapeHtml(currentUser.email || 'Signed in')}</p>
+    <p class="account-menu-plan">Plan: <span class="plan-badge ${premium ? 'premium' : ''}">${planLabel}</span></p>
     <button type="button" class="account-menu-item" data-action="dashboards">My dashboards</button>
+    ${billingItem}
     <button type="button" class="account-menu-item" data-action="signout">Sign out</button>
   `;
   document.body.appendChild(accountMenu);
@@ -181,6 +253,8 @@ function toggleAccountMenu() {
     closeAccountMenu();
     if (action === 'signout') signOut();
     else if (action === 'dashboards') openDashboardsModal();
+    else if (action === 'upgrade') startCheckout();
+    else if (action === 'portal') openPortal();
   });
 }
 document.addEventListener('click', (e) => {
@@ -490,16 +564,35 @@ async function onSignedIn() {
 async function init() {
   supabase = await getSupabase();
   updateHeader();
-  if (!supabase) return; // guest-only mode
+  if (!supabase) {
+    refreshFeatures(); // guests still need the feature map for upgrade prompts
+    return;
+  }
 
   const { data: { session } } = await supabase.auth.getSession();
   currentUser = session?.user || null;
+  currentToken = session?.access_token || null;
   if (currentUser) await onSignedIn();
   else updateHeader();
+
+  // Returning from Stripe Checkout: entitlement updates arrive via webhook, so
+  // re-pull features a couple of times to catch the just-activated subscription.
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('checkout') === 'success') {
+    toast('Thanks for subscribing! Unlocking Premium…');
+    setTimeout(refreshFeatures, 1500);
+    setTimeout(refreshFeatures, 4500);
+  }
+  if (params.has('checkout')) {
+    params.delete('checkout');
+    const qs = params.toString();
+    history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+  }
 
   supabase.auth.onAuthStateChange((event, session) => {
     const prevId = currentUser?.id || null;
     currentUser = session?.user || null;
+    currentToken = session?.access_token || null;
     closeAccountMenu();
     if (currentUser && currentUser.id !== prevId) {
       closeModal(authOverlay);
@@ -509,6 +602,7 @@ async function init() {
       setActiveId(null);
       dirty = false;
       dashboardNameEl.hidden = true;
+      window.LunarFeatures = null;
     }
     updateHeader();
   });

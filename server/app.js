@@ -7,6 +7,10 @@ const yfinance = require('./yfinance');
 const { analyzeText } = require('./speculation');
 const houseStockWatcher = require('./houseStockWatcher');
 const senateTrades = require('./senateTrades');
+const { withUser, requireUser, requireFeature, gateActive } = require('./auth');
+const { isPremiumActive } = require('./entitlements');
+const { FEATURES } = require('./featureFlags');
+const stripeBilling = require('./stripe');
 
 const app = express();
 const MAX_BATCH_SYMBOLS = 60;
@@ -27,7 +31,23 @@ function toDateStr(d) {
 }
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Stripe webhook needs the RAW request body for signature verification, so it
+// must be registered with express.raw BEFORE the JSON body parser below.
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const signature = req.headers['stripe-signature'];
+  try {
+    const type = await stripeBilling.handleWebhook(req.body, signature);
+    res.json({ received: true, type });
+  } catch (err) {
+    // Bad signature / misconfiguration -> 400 so Stripe retries.
+    res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+});
+
 app.use(express.json());
+// Attach req.user / req.entitlement from the bearer token when present (guests pass through).
+app.use(withUser);
 
 // --- API routes ---
 
@@ -41,6 +61,47 @@ app.get('/api/config', (req, res) => {
     supabaseUrl: process.env.SUPABASE_URL || '',
     supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
   });
+});
+
+// Feature-flag map + the caller's entitlement. The browser uses this to show
+// upgrade prompts that mirror exactly what the server enforces.
+app.get('/api/features', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const premium = isPremiumActive(req.entitlement);
+  res.json({
+    gateActive: gateActive(),
+    billingEnabled: stripeBilling.billingEnabled(),
+    user: req.user ? { id: req.user.id, email: req.user.email } : null,
+    entitlement: req.user
+      ? {
+          plan: (req.entitlement && req.entitlement.plan) || 'free',
+          status: (req.entitlement && req.entitlement.status) || 'inactive',
+          premium,
+          currentPeriodEnd: (req.entitlement && req.entitlement.current_period_end) || null,
+        }
+      : null,
+    features: FEATURES,
+  });
+});
+
+// --- Billing (Stripe Checkout + Customer Portal) ---
+
+app.post('/api/billing/checkout', requireUser, async (req, res) => {
+  try {
+    const url = await stripeBilling.createCheckoutSession(req, req.user);
+    res.json({ url });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/billing/portal', requireUser, async (req, res) => {
+  try {
+    const url = await stripeBilling.createPortalSession(req, req.user);
+    res.json({ url });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/quote', async (req, res) => {
@@ -90,7 +151,7 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
-app.get('/api/news', async (req, res) => {
+app.get('/api/news', requireFeature('news.ticker'), async (req, res) => {
   const symbol = String(req.query.symbol || '').toUpperCase();
   const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 30);
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 30);
@@ -125,7 +186,7 @@ app.get('/api/news', async (req, res) => {
 });
 
 // General (not-per-symbol) stock market news for the dedicated News tab.
-app.get('/api/news/market', async (req, res) => {
+app.get('/api/news/market', requireFeature('news.market'), async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
 
   try {
@@ -151,7 +212,7 @@ app.get('/api/news/market', async (req, res) => {
   }
 });
 
-app.get('/api/dividend', async (req, res) => {
+app.get('/api/dividend', requireFeature('data.dividend'), async (req, res) => {
   const symbol = String(req.query.symbol || '').toUpperCase();
   if (!isValidSymbol(symbol)) return res.status(400).json({ error: 'Invalid symbol' });
 
@@ -165,7 +226,7 @@ app.get('/api/dividend', async (req, res) => {
   }
 });
 
-app.get('/api/dividend-history', async (req, res) => {
+app.get('/api/dividend-history', requireFeature('tools.dividendHistory'), async (req, res) => {
   const symbol = String(req.query.symbol || '').toUpperCase();
   const years = Math.min(Math.max(parseInt(req.query.years, 10) || 5, 1), 10);
   if (!isValidSymbol(symbol)) return res.status(400).json({ error: 'Invalid symbol' });
@@ -180,7 +241,7 @@ app.get('/api/dividend-history', async (req, res) => {
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-app.get('/api/total-return', async (req, res) => {
+app.get('/api/total-return', requireFeature('tools.totalReturn'), async (req, res) => {
   const symbol = String(req.query.symbol || '').toUpperCase();
   const from = String(req.query.from || '');
   const to = String(req.query.to || '');
@@ -202,7 +263,7 @@ app.get('/api/total-return', async (req, res) => {
 
 const VALID_PERIODS = new Set(['5d', '1mo', '3mo', '6mo', '1y', '2y', '5y']);
 
-app.get('/api/candles', async (req, res) => {
+app.get('/api/candles', requireFeature('charts.candles'), async (req, res) => {
   const symbol = String(req.query.symbol || '').toUpperCase();
   const period = String(req.query.period || '1mo');
   if (!isValidSymbol(symbol)) return res.status(400).json({ error: 'Invalid symbol' });
@@ -233,7 +294,7 @@ function recommendationConsensus(rec) {
   return { label, score: Math.round(score * 100) / 100 };
 }
 
-app.get('/api/predictions', async (req, res) => {
+app.get('/api/predictions', requireFeature('charts.predictions'), async (req, res) => {
   const symbol = String(req.query.symbol || '').toUpperCase();
   if (!isValidSymbol(symbol)) return res.status(400).json({ error: 'Invalid symbol' });
 
@@ -298,7 +359,7 @@ app.get('/api/crypto/quote', async (req, res) => {
   }
 });
 
-app.get('/api/crypto/candles', async (req, res) => {
+app.get('/api/crypto/candles', requireFeature('charts.candles'), async (req, res) => {
   const base = String(req.query.symbol || '').toUpperCase();
   const period = String(req.query.period || '1mo');
   if (!isValidCryptoSymbol(base)) return res.status(400).json({ error: 'Invalid crypto symbol' });
@@ -314,7 +375,7 @@ app.get('/api/crypto/candles', async (req, res) => {
   }
 });
 
-app.get('/api/crypto/news', async (req, res) => {
+app.get('/api/crypto/news', requireFeature('news.crypto'), async (req, res) => {
   const base = String(req.query.symbol || '').toUpperCase();
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 8, 1), 50);
   if (base && !isValidCryptoSymbol(base)) return res.status(400).json({ error: 'Invalid crypto symbol' });
@@ -350,7 +411,7 @@ app.get('/api/crypto/news', async (req, res) => {
   }
 });
 
-app.get('/api/congress', async (req, res) => {
+app.get('/api/congress', requireFeature('data.congress'), async (req, res) => {
   const raw = String(req.query.symbol || '').toUpperCase();
   const symbol = raw || null;
   if (symbol && !isValidSymbol(symbol)) return res.status(400).json({ error: 'Invalid symbol' });

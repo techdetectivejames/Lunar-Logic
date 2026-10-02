@@ -74,6 +74,50 @@ added later without a schema migration. Guests' layouts live in
 database. You can save, load, duplicate and delete dashboards from the
 **Dashboards** panel in the header.
 
+## Premium / paywall (optional)
+
+A subscription paywall (Stripe) gates premium features. It builds on the
+Supabase setup above and is **off** until configured — when off, everything
+behaves like the account-only (Phase 1) gating.
+
+Tiers (see [`server/featureFlags.js`](server/featureFlags.js), the single
+source of truth shared by the server gate and the UI):
+
+- **Guest** — live prices (watchlists, ticker tape, card summaries).
+- **Free** (signed in) — price charts, dividend info, per-ticker & crypto news,
+  dividend calculator.
+- **Premium** (paid) — market news feed, analyst predictions, congressional
+  trades, total-return calculator, dividend-history charts.
+
+Gating is enforced **server-side** (per-route middleware in
+[`server/auth.js`](server/auth.js) + RLS on `entitlements`), so hiding the UI is
+only cosmetic — the API returns `401 { authRequired }` / `403 { upgradeRequired }`
+for content the caller isn't entitled to.
+
+To enable it:
+
+1. Run [`supabase/phase2-stripe.sql`](supabase/phase2-stripe.sql) in the Supabase
+   SQL editor (adds the `entitlements` table, RLS, and a free-plan default on
+   signup).
+2. In Stripe, create a recurring **Premium** product/price and copy its price id.
+3. Add a webhook endpoint pointing at `/api/stripe/webhook` (events:
+   `checkout.session.completed`, `customer.subscription.created|updated|deleted`)
+   and copy its signing secret. Locally you can use
+   `stripe listen --forward-to localhost:3000/api/stripe/webhook`.
+4. Set these in `.env` (and your host's env):
+
+   ```bash
+   SUPABASE_SERVICE_ROLE_KEY=...   # server-only, bypasses RLS — keep secret
+   STRIPE_SECRET_KEY=sk_test_...
+   STRIPE_PRICE_ID=price_...
+   STRIPE_WEBHOOK_SECRET=whsec_...
+   APP_URL=https://your-app.example   # optional; for Checkout/Portal redirects
+   ```
+
+Users upgrade via **Stripe Checkout** (account menu → *Upgrade to Premium*) and
+manage/cancel via the **Customer Portal** (account menu → *Manage billing*).
+Entitlements update automatically from the webhook.
+
 ## Project layout
 
 - `server/app.js` — The Express app itself (all `/api/*` routes + static file serving); no `.listen()` call, so it can be reused by both entrypoints below.
@@ -85,5 +129,11 @@ database. You can save, load, duplicate and delete dashboards from the
 - `server/speculation.js` — Keyword heuristic used to generate the speculation notes.
 - `public/` — Static frontend (vanilla HTML/CSS/JS, no build step).
 - `public/supabase-client.js` — Loads the public Supabase config from `/api/config` and lazily creates the browser client (returns `null` in guest mode).
-- `public/account.js` — Sign-in/out (email + Google) and the save/load/duplicate/delete dashboard UI; reads/writes the current layout via `window.LunarDashboard`.
-- `supabase/schema.sql` — One-off database setup (tables, RLS policies, triggers).
+- `public/account.js` — Sign-in/out (email + Google), save/load/duplicate/delete dashboard UI, and the Stripe upgrade/billing flow; reads/writes the current layout via `window.LunarDashboard` and publishes auth/entitlement state via `window.LunarAuth` / `window.LunarFeatures`.
+- `server/supabaseAdmin.js` — Server-only Supabase client (service_role) for verifying JWTs and writing entitlements.
+- `server/auth.js` — Express middleware: attaches the user/entitlement from the bearer token and enforces per-feature gating.
+- `server/entitlements.js` — Entitlement read/write helpers.
+- `server/featureFlags.js` — The free-vs-premium feature map (shared by server + client).
+- `server/stripe.js` — Stripe Checkout, Customer Portal, and webhook reconciliation.
+- `supabase/schema.sql` — One-off database setup (profiles, dashboards, RLS, triggers).
+- `supabase/phase2-stripe.sql` — One-off paywall setup (entitlements table + RLS).
